@@ -1,0 +1,267 @@
+Gizmo {
+ inputs 4
+ name AlphaGen
+ onCreate "import alphagen_nuke; alphagen_nuke.restore_saved(nuke.thisNode())"
+ knobChanged "import alphagen_nuke; alphagen_nuke.inputs_changed(nuke.thisNode())"
+ tile_color 708826879
+ label "[value ag_status_label]"
+ help "AlphaGen: Unified Single-Tab VLM-Grounded Video Alpha Generator."
+
+ addUserKnob {20 ag_main l AlphaGen}
+ addUserKnob {26 title l "" T "<b><font size='5' color='#64B5F6'>✦ AlphaGen</font></b> <font color='#888888'>| Controllable Video Alpha Generator</font>"}
+
+ addUserKnob {26 sec_1 l "" T "<br><b><font size='3' color='#90CAF9'>1. TARGET SELECTION (VLM & SAM2)</font></b>"}
+ addUserKnob {1 ag_prompt l "Target Prompt"}
+ ag_prompt "중앙의 갈색 셔츠를 입은 인물"
+ addUserKnob {3 ag_ref_frame l "Ref Frame"}
+ ag_ref_frame 1
+ addUserKnob {7 ag_mask_expand l "Mask Expansion" R 1 2}
+ ag_mask_expand 1.2
+ addUserKnob {22 ag_btn_vlm l "<b><font color='#2196F3'>🔍 Analyze Target (VLM)</font></b>" T "import alphagen_nuke; alphagen_nuke.action(nuke.thisNode(), 'vlm')" +STARTLINE}
+ addUserKnob {1 ag_target_info l "Target Info" +READONLY}
+ ag_target_info "Ready — enter prompt and click Analyze Target"
+
+ addUserKnob {26 sec_2 l "" T "<br><b><font size='3' color='#90CAF9'>2. LTX ALPHA VIDEO GENERATION</font></b>"}
+ addUserKnob {3 first l "First Frame"}
+ first 1
+ addUserKnob {3 last l "Last Frame"}
+ last 17
+ addUserKnob {22 ag_btn_sync l "⟳ Auto Range" T "import alphagen_nuke; alphagen_nuke.sync_source_range(nuke.thisNode())" -STARTLINE}
+ addUserKnob {3 max_side l "Max Side"}
+ max_side 512
+ addUserKnob {3 seed l Seed}
+ seed 1234
+ addUserKnob {22 generate l "<b><font color='#4CAF50'>🚀 Generate Alpha Video</font></b>" T "import alphagen_nuke; alphagen_nuke.action(nuke.thisNode(), 'generate')" +STARTLINE}
+ addUserKnob {22 cancel l "⏹ Cancel" T "import alphagen_nuke; alphagen_nuke.action(nuke.thisNode(), 'cancel')"}
+ addUserKnob {26 ag_progress_bar l "" T "<div style='background-color:#222; border-radius:4px; height:20px; border:1px solid #444; width:100%; text-align:center; color:#888; font-size:11px; line-height:20px; font-weight:bold;'>Ready</div>"}
+ addUserKnob {1 ag_status_label l Status +READONLY}
+ ag_status_label "Ready"
+
+ addUserKnob {26 sec_3 l "" T "<br><b><font size='3' color='#90CAF9'>3. MATTE REFINEMENT (CORE & EDGE)</font></b><br><font color='#777777'>Adjust parameters directly and click Update Matte to re-calculate instantly.</font>"}
+ addUserKnob {26 sub_density l "" T "<b>Density & Alpha Curve</b>"}
+ addUserKnob {7 black_clip l "Background Cutoff" R 0 0.5}
+ black_clip 0.05
+ addUserKnob {7 white_clip l "White Level" R 0.5 1}
+ white_clip 0.95
+ addUserKnob {7 gamma l "Alpha Gamma" R 0.1 5}
+ gamma 1
+
+ addUserKnob {26 sub_core l "" T "<b>Core Solidification</b>"}
+ addUserKnob {7 core_threshold l "Core Threshold" R 0.01 1}
+ core_threshold 0.6
+ addUserKnob {3 core_inset l "Core Inset px"}
+ core_inset 3
+ addUserKnob {7 core_strength l "Core Strength" R 0 1}
+ core_strength 1
+ addUserKnob {6 fill_holes l "Fill Small Holes" +STARTLINE}
+ addUserKnob {3 max_hole_area l "Max Hole Area px"}
+ max_hole_area 64
+
+ addUserKnob {26 sub_edge l "" T "<b>Edge & Detail Restoration</b>"}
+ addUserKnob {3 safe_radius l "Safe Radius px"}
+ safe_radius 6
+ addUserKnob {7 edge_restore l "Edge Restoration" R 0 1}
+ edge_restore 0.5
+ addUserKnob {7 feather l "Edge Feather sigma px" R 0 10}
+ feather 0.35
+
+ addUserKnob {22 bake l "<b><font color='#FF9800'>⚡ Update Matte (CPU)</font></b>" T "import alphagen_nuke; alphagen_nuke.action(nuke.thisNode(), 'refine')" +STARTLINE}
+
+ addUserKnob {26 sec_4 l "" T "<br><b><font size='3' color='#90CAF9'>4. OUTPUT & VIEW MODE</font></b>"}
+ addUserKnob {4 view_mode l View M {"Final alpha" "Raw LTX alpha" "Target Selection (VLM)" "Core" "Edge" "Source with alpha" "Premultiplied RGBA"}}
+
+ addUserKnob {1 vlm_mask_path l "" +INVISIBLE}
+ addUserKnob {1 result_path l "" +INVISIBLE}
+ addUserKnob {1 job_path l "" +INVISIBLE}
+ addUserKnob {6 has_result l "" +INVISIBLE}
+ addUserKnob {6 has_vlm_mask l "" +INVISIBLE}
+ addUserKnob {6 has_selection_input l "" +INVISIBLE}
+ addUserKnob {6 has_core_input l "" +INVISIBLE}
+ addUserKnob {6 has_garbage_input l "" +INVISIBLE}
+}
+ Input {
+  inputs 0
+  name Source
+  number 0
+ }
+ set SOURCE [stack 0]
+ Input {
+  inputs 0
+  name Selection
+  number 1
+ }
+ set SELECTION_INPUT [stack 0]
+ Input {
+  inputs 0
+  name CoreAdd
+  number 2
+ }
+ set COREADD_INPUT [stack 0]
+ Input {
+  inputs 0
+  name Garbage
+  number 3
+ }
+ set GARBAGE_INPUT [stack 0]
+ Constant {
+  inputs 0
+  color 0
+  name EmptyMask
+ }
+ set EMPTY [stack 0]
+ push $COREADD_INPUT
+ push $EMPTY
+ Switch {
+  inputs 2
+  which {{parent.has_core_input}}
+  name OptionalCore
+ }
+ set COREADD [stack 0]
+ push $GARBAGE_INPUT
+ push $EMPTY
+ Switch {
+  inputs 2
+  which {{parent.has_garbage_input}}
+  name OptionalGarbage
+ }
+ set GARBAGE [stack 0]
+ Read {
+  inputs 0
+  name Read_selection
+  raw true
+  on_error black
+ }
+ Expression {
+  expr3 r
+  name VlmAlpha
+ }
+ set VLM_ALPHA [stack 0]
+ push $SELECTION_INPUT
+ push $VLM_ALPHA
+ Switch {
+  inputs 2
+  which {{parent.has_selection_input}}
+  name SelectSource
+ }
+ Expression {
+  expr0 "clamp(a,0,1)"
+  expr1 "clamp(a,0,1)"
+  expr2 "clamp(a,0,1)"
+  expr3 "clamp(a,0,1)"
+  name SelectionAlpha
+ }
+ set SELECTION [stack 0]
+ Read {
+  inputs 0
+  name Read_raw
+  raw true
+  on_error black
+ }
+ Expression {
+  expr3 r
+  name RawAlpha
+ }
+ set RAW [stack 0]
+ Read {
+  inputs 0
+  name Read_core
+  raw true
+  on_error black
+ }
+ Expression {
+  expr3 r
+  name CoreAlpha
+ }
+ set CORE [stack 0]
+ Read {
+  inputs 0
+  name Read_edge
+  raw true
+  on_error black
+ }
+ Expression {
+  expr3 r
+  name EdgeAlpha
+ }
+ set EDGE [stack 0]
+ Read {
+  inputs 0
+  name Read_final
+  raw true
+  on_error black
+ }
+ Expression {
+  expr3 r
+  name RefinedAlpha
+ }
+ set REFINED [stack 0]
+ push $COREADD
+ push $REFINED
+ Merge2 {
+  inputs 2
+  operation max
+  Achannels rgba
+  Bchannels rgba
+  output rgba
+  screen_alpha false
+  bbox B
+  name AddCore
+ }
+ set UNION [stack 0]
+ push $GARBAGE
+ push $UNION
+ Merge2 {
+  inputs 2
+  operation stencil
+  Achannels rgba
+  Bchannels rgba
+  output rgba
+  screen_alpha false
+  bbox B
+  name RemoveGarbage
+ }
+ Expression {
+  expr0 "clamp(a,0,1)"
+  expr1 "clamp(a,0,1)"
+  expr2 "clamp(a,0,1)"
+  expr3 "clamp(a,0,1)"
+  name FinalAlpha
+ }
+ set FINAL [stack 0]
+ push $FINAL
+ push $SOURCE
+ Copy {
+  inputs 2
+  from0 rgba.alpha
+  to0 rgba.alpha
+  name SourceWithAlpha
+ }
+ set RGBA [stack 0]
+ Premult {
+  name Premultiplied
+ }
+ set PREMULT [stack 0]
+ push $PREMULT
+ push $RGBA
+ push $EDGE
+ push $CORE
+ push $SELECTION
+ push $RAW
+ push $FINAL
+ Switch {
+  inputs 7
+  which {{parent.view_mode}}
+  name Display
+ }
+ set DISPLAY [stack 0]
+ push $DISPLAY
+ push $SOURCE
+ Switch {
+  inputs 2
+  which {{"parent.has_result || (parent.view_mode == 2 && (parent.has_vlm_mask || parent.has_selection_input))"}}
+  name ReadyGate
+ }
+ Output {
+  name Output
+ }
+end_group

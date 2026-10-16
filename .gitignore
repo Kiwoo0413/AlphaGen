@@ -1,0 +1,62 @@
+# ==============================================================================
+# AlphaGen .gitignore
+# Excludes local experiments, generated jobs, caches, and large binary artifacts.
+# Keeps core Gizmo files, bridge scripts, configs, tools, tests, and documentation.
+# ==============================================================================
+
+# --- Local Experiments & Benchmarks (Heavy video/pt data) ---
+experiments/
+
+# --- Dynamic Jobs & Cache Directories (Temporary renders & sequence outputs) ---
+jobs/
+*.lock
+
+# --- Nuke Session Test Dumps ---
+nuke_tests/
+
+# --- Python Bytecode & Cache ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- Local Runtimes & Virtual Environments ---
+# Python dependencies should be installed via `pip install -r requirements.txt`
+runtime/
+.venv/
+venv/
+env/
+ENV/
+
+# --- Environment Variables & Local Overrides ---
+.env
+*.env
+*.local.json
+
+# --- Log Files & Scratch Dumps ---
+*.log
+*.tmp
+*.bak
+*.swp
+
+# --- Large Media & Model Artifacts (Never commit weights/videos) ---
+*.mp4
+*.avi
+*.mov
+*.exr
+*.pt
+*.pth
+*.safetensors
+*.ckpt
+
+# --- OS & IDE Metadata ---
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace

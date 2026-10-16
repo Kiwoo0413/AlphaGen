@@ -1,0 +1,5 @@
+{
+  "source": "C:\\Users\\yido2\\.nuke\\AlphaGen\\vendor\\LTX-2\\packages\\ltx-pipelines\\src\\ltx_pipelines\\ic_lora.py",
+  "source_sha256": "0deb966c22b7fa362e3be7fac22d39ce548d603812c8b36ca778b357d273241a",
+  "change": "No AudioDecoder; use video-only split_decoded_chunks export; cache decoded tensors before encoding."
+}
