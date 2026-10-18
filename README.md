@@ -19,7 +19,7 @@ $$\begin{matrix}
 \downarrow \\
 \textbf{대상 조건 처리 (LTX Alpha)} \quad\to\quad \text{Attention Mask (공간 제어) + Prompt Embedding (의미 제어)} \\
 \downarrow \\
-\textbf{LTX-2.5 IC-LoRA 인퍼런스} \quad\to\quad \text{멀티프레임 원시 알파 비디오 텐서 생성} \\
+\textbf{LTX-2.5 IC-LoRA 인퍼런스} \quad\to\quad \text{멀티프레임 원시 알파 생성 (49프레임 청크 / 17프레임 코사인 오버랩)} \\
 \downarrow \\
 \textbf{CompMatte CPU 정제} \quad\to\quad \text{Density Curve + Core Solidification + Edge Restoration} \\
 \downarrow \\
@@ -35,10 +35,10 @@ $$\begin{matrix}
 ```text
 AlphaGen/
 ├── gizmos/
-│   └── AlphaGen.gizmo              # 리팩토링된 Nuke 기즈모 (클린 3탭 레이아웃, VLM 프롬프트 탑재)
-├── alphagen_nuke.py                # Nuke API & GUI 브릿지 (비동기 작업 제어, 프레임 입출력)
+│   └── AlphaGen.gizmo              # 리팩토링된 Nuke 기즈모 (4단계 선형 단일 탭, 단계별 구분선, Stop 버튼)
+├── alphagen_nuke.py                # Nuke API & GUI 브릿지 (비동기 작업 제어, 프레임 입출력, 프로세스 트리 종료)
 ├── alphagen_vlm.py                 # VLM (Gemini Flash) 객체 그라운딩 & SAM2 분할 모듈
-├── alphagen_worker.py              # 외부 Python 독립 AI 워커 (Nuke GIL 분리 및 GPU 락 제어)
+├── alphagen_worker.py              # 외부 Python 독립 AI 워커 (Nuke GIL 분리, 49프레임 청크/17프레임 오버랩)
 ├── alphagen_matte.py               # CPU 코어/엣지 분리 매트 정제 엔진 (순수 수학/OpenCV)
 ├── load_alphagen.py                # Nuke Script Editor 원클릭 실행 스크립트
 ├── init.py / menu.py               # Nuke 패키지 자동 경로 등록
@@ -47,7 +47,7 @@ AlphaGen/
 ├── README.md                       # 프로젝트 종합 기술 문서 (본 파일)
 │
 ├── tools/                          # 필수 실행 및 검증 도구
-│   ├── run_experiment.py           # LTX 인퍼런스 실행 드라이버
+│   ├── run_experiment.py           # LTX 인퍼런스 실행 드라이버 (49프레임 청크 CLI 인자 자동 주입)
 │   ├── ic_lora_video_only.py       # 영상 전용 IC-LoRA 파이프라인 스크립트
 │   ├── ic_lora_video_only.provenance.json
 │   └── check_gizmo_structure.py    # 기즈모 Tcl 문법 및 노드 연결 헤드리스 검증기
@@ -55,7 +55,7 @@ AlphaGen/
 ├── tests/                          # 100% 헤드리스 유닛 테스트 스위트
 │   ├── test_matte.py               # 코어/엣지 수학 및 형태학 알고리즘 검증
 │   ├── test_vlm.py                 # VLM 좌표 변환 및 SAM2 추론 검증
-│   └── test_worker.py              # 서브프로세스 IPC 및 비동기 작업 취소 검증
+│   └── test_worker.py              # 서브프로세스 IPC, 프로세스 트리 강제 종료 및 청크 생성 검증
 │
 ├── experiments/                    # 벤치마크 및 실험 데이터
 │   ├── 001/                        # 기본 알파 프롬프트 대조군 데이터
@@ -70,7 +70,7 @@ AlphaGen/
 
 ## 🎛️ Nuke 기즈모 단일 탭 구성 (Unified Linear Workflow)
 
-기존의 번거로운 탭 이동과 접이식 토글을 전면 제거하고, 진행 순서대로 위에서부터 차례대로 조작할 수 있는 **직관적인 단일 탭**으로 통합했습니다:
+기존의 번거로운 탭 이동과 접이식 토글을 전면 제거하고, 각 단계 사이에 **시각적 네이티브 구분선**을 배치하여 위에서부터 차례대로 조작할 수 있는 **직관적인 단일 탭**으로 통합했습니다:
 
 1. **Step 1. TARGET SELECTION (VLM & SAM2)**:
    - **Target Prompt**: 자연어 프롬프트(예: `"중앙의 갈색 셔츠를 입은 인물"`) 입력
@@ -78,8 +78,9 @@ AlphaGen/
    - **Mask Expansion**: SAM 분할 마스크 외곽 자동 확장 비율 (기본값: `1.2배`, 피사체 움직임/헤어/모션 블러 여유 공간 확보)
    - **[🔍 Analyze Target (VLM)]**: 1~2초 내에 BBox 그라운딩 및 SAM2 마스크 추출 후 1.2배 자동 확장 (완료 시 뷰어 자동 전환)
 2. **Step 2. LTX ALPHA VIDEO GENERATION**:
+   - **First / Last**: 생성할 프레임 구간 설정 (기존 121프레임 한계를 해제하고 **49프레임 청크 분할 및 17프레임 코사인 오버랩 파이프라인**을 적용하여 수백~수천 프레임 롱테이크도 VRAM 초과 없이 끊김 없이 생성)
    - **[🚀 Generate Alpha Video]**: 백그라운드 LTX 비디오 디퓨전 생성 실행
-   - **[⏹ Stop Queue (중단)]**: 백그라운드에서 실행 중인 큐 및 GPU/CPU 프로세스를 즉시 강제 종료하고 리소스 완전 해제
+   - **[⏹ Stop Queue (중단)]**: 백그라운드에서 실행 중인 큐 및 GPU/CPU 서브프로세스 트리(`taskkill /T /F`)를 즉시 강제 종료하고 VRAM 완전 회수
    - **실시간 프로그레스 바**: `[████████░░░░] 65% (LTX Denoising step 5/8)` 실시간 표시 및 작업 완료 시 결과 자동 연결
 3. **Step 3. MATTE REFINEMENT (CORE & EDGE)**:
    - 노드 프로퍼티에 직접 노출된 슬라이더로 즉시 조절:
@@ -137,8 +138,6 @@ Nuke가 시작될 때마다 자동으로 AlphaGen 메뉴와 노드가 로드되�
 
 ---
 
----
-
 ### 2. 의존성 패키지 설치 (Requirements)
 
 기존 파이썬 환경(시스템 Python 또는 기존 AI 런타임)에서 AlphaGen 폴더로 이동 후 패키지를 설치합니다:
@@ -187,35 +186,34 @@ AlphaGen이 외부 API 및 GPU 런타임을 올바르게 찾을 수 있도록 �
 
 ```powershell
 python -m unittest discover tests
-# 결과: Ran 18 tests ... OK
+# 결과: Ran 20 tests ... OK
 ```
 
 ---
 
 ## 📁 생성된 마스크 및 결과 파일 저장 위치 (File Storage)
 
-생성된 모든 알파 마스크는 아티스트가 Nuke 및 타 합성 툴에서 바로 연결하여 사용할 수 있도록, **원본 영상 파일이 위치한 디렉토리 하위에 `alpha/` 폴더를 자동 생성**하여 저장됩니다:
+생성된 모든 알파 마스크는 아티스트가 Nuke 및 타 합성 툴에서 바로 연결하여 사용할 수 있도록, **원본 영상 파일이 위치한 디렉토리 하위에 `alpha/` 폴더를 자동 생성**하여 저장됩니다. 디렉토리 오염을 방지하고 작업 편의성을 극대화하기 위해 꼭 필요한 **`final/`과 `raw/` 2개 폴더 체계**로 정돈되어 출력됩니다:
 
 ```text
 [원본 영상 위치]/
 ├── source_plate.%04d.exr           # 원본 영상 시퀀스 (또는 clip.mp4)
 │
 └── alpha/                          # ★ 원본과 동일한 위치에 자동 생성되는 알파 폴더
-    ├── alpha.%06d.png              # ★ [최종 완성 알파] 16-bit 무손실 완성 알파 시퀀스 (Nuke Read_final 자동 로드)
+    ├── final/
+    │   └── alpha.%06d.png          # ★ [최종 완성 알파] 16-bit 무손실 완성 알파 시퀀스 (Nuke Read_final 자동 로드)
+    ├── raw/
+    │   └── alpha.%06d.png          # LTX 신경망이 생성한 원시 알파 시퀀스 (Nuke Read_raw 자동 로드)
     ├── vlm_initial_mask.png        # SAM2 1.2배 자동 확장 타겟 마스크 (사전 검증용)
     ├── vlm_selection.json          # VLM 바운딩 박스 및 신뢰도 메타데이터
-    ├── result.json                 # 최종 결과 명세서
-    ├── raw/
-    │   └── alpha.%06d.png          # LTX 신경망이 생성한 원시 알파 시퀀스
-    ├── core/
-    │   └── alpha.%06d.png          # 침식 및 구멍 메우기로 추출한 고체 코어 매트
-    └── edge/
-        └── alpha.%06d.png          # 고주파 머리카락/모션블러 디테일이 보존된 부드러운 엣지 매트
+    └── result.json                 # 최종 결과 명세서
 ```
 
 > [!NOTE]
-> * **작업 임시 캐시 격리**: 어텐션 비디오(`attention_mask.avi`), 디퓨전 모델 로그 및 텐서 캐시 등 무거운 내부 연산 파일은 `AlphaGen/jobs/` 샌드박스에서 격리 처리되며, 최종 산출물만 원본 영상의 `alpha/` 폴더로 저장됩니다.
-> * **Nuke 뷰어 자동 연동**: 마스크 생성이 완료되면 Nuke 기즈모 내부의 `Read_final`, `Read_raw`, `Read_core`, `Read_edge`, `Read_selection` 노드가 `<원본폴더>/alpha/` 경로를 **100% 자동으로 연결하여 실시간 표시**합니다.
+> * **깔끔한 산출물 관리 (raw & final 2폴더 체계)**: 사용자 프로젝트 디렉토리에는 불필요한 중간 디버그 파일 없이 최종 마스크(`final/`)와 원시 신경망 마스크(`raw/`)만 생성됩니다.
+> * **내부 임시 캐시 분리 (`core/`, `edge/`)**: 코어 및 엣지 매트는 작업 세션 동안 `~/.nuke/AlphaGen/jobs/<job_id>/` 내부 임시 캐시 디렉토리에만 보관되며, Nuke 기즈모에서 실시간 뷰잉이 지원되면서도 최종 프로젝트 저장 공간을 낭비하지 않습니다.
+> * **Nuke 뷰어 자동 연동**: 마스크 생성이 완료되면 Nuke 기즈모 내부의 `Read_final`, `Read_raw`, `Read_selection` 노드가 `<원본폴더>/alpha/` 경로를, `Read_core`와 `Read_edge`는 캐시 경로를 **100% 자동으로 연결하여 실시간 표시**합니다.
+> * **Windows 파일 잠금 방어**: Nuke 백그라운드 폴링과 작업 프로세스 간 파일 충돌(`WinError 5/32`)을 방지하기 위한 재시도 및 안전 쓰기 로직이 적용되어 있습니다.
 > * 원본 소스가 파일이 아닌 가상 노드(Constant 등)인 경우 `AlphaGen/jobs/` 하위에 안전하게 자동 폴백 저장됩니다.
 
 ---
