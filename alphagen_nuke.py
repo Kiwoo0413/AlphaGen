@@ -209,6 +209,61 @@ def get_source_alpha_dir(node):
     return None
 
 
+def get_nuke_cache_dir() -> Path:
+    """Returns the cache directory based on Nuke's preferences and environment.
+    Priority:
+    1. ALPHAGEN_CACHE_DIR environment variable (manual user override)
+    2. Nuke Preferences 'localCachePath' (evaluated)
+    3. Nuke Preferences 'DiskCachePath' (evaluated)
+    4. NUKE_TEMP_DIR environment variable
+    5. OS temp / nuke / AlphaGen
+    6. Fallback: ROOT / 'jobs'
+    """
+    override = os.environ.get("ALPHAGEN_CACHE_DIR")
+    if override and override.strip():
+        p = Path(override.strip()).resolve()
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    try:
+        nuke = _nuke()
+        pref = nuke.toNode("preferences")
+        if pref:
+            for knob_name in ("localCachePath", "DiskCachePath"):
+                if knob_name in pref.knobs():
+                    val = None
+                    try:
+                        val = pref[knob_name].evaluate()
+                    except Exception:
+                        val = pref[knob_name].value()
+                    if val and isinstance(val, str) and val.strip():
+                        val_str = val.strip()
+                        if not val_str.startswith("[") and not val_str.startswith("$"):
+                            p = Path(val_str).resolve() / "AlphaGen"
+                            p.mkdir(parents=True, exist_ok=True)
+                            return p
+    except Exception:
+        pass
+
+    env_temp = os.environ.get("NUKE_TEMP_DIR")
+    if env_temp and env_temp.strip():
+        p = Path(env_temp.strip()).resolve() / "AlphaGen"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    try:
+        import tempfile
+        p = Path(tempfile.gettempdir()).resolve() / "nuke" / "AlphaGen"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+    except Exception:
+        pass
+
+    fallback = ROOT / "jobs"
+    fallback.mkdir(parents=True, exist_ok=True)
+    return fallback
+
+
 def inputs_changed(node):
     nuke = _nuke()
     if nuke.thisKnob() and nuke.thisKnob().name() != "inputChange":
@@ -373,7 +428,8 @@ def _new_job(node, mode):
                     )
                 except Exception:
                     pass
-    job = ROOT / "jobs" / (mode + "_" + uuid.uuid4().hex[:12])
+    cache_dir = get_nuke_cache_dir()
+    job = cache_dir / (mode + "_" + uuid.uuid4().hex[:12])
     job.mkdir(parents=True, exist_ok=False)
     if "job_path" in node.knobs():
         node["job_path"].setValue(job.as_posix())
@@ -392,6 +448,7 @@ def _launch(node, job, request, job_mode):
     env.pop("PYTHONPATH", None)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     env["HF_HUB_OFFLINE"] = "1"
+    env["ALPHAGEN_CACHE_DIR"] = str(job.parent)
     (job / "temp").mkdir(exist_ok=True)
     env["TMP"] = env["TEMP"] = str(job / "temp")
     try:

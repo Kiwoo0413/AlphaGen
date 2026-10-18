@@ -86,6 +86,25 @@ class WorkerTests(unittest.TestCase):
         self.assertTrue(_is_pid_running(os.getpid()))
         self.assertFalse(_is_pid_running(99999999))
 
+    def test_cache_directory_resolution(self):
+        import os
+        from alphagen_nuke import get_nuke_cache_dir
+        from alphagen_worker import get_jobs_root
+
+        # 1. Default fallback is inside temp / nuke / AlphaGen
+        cache = get_nuke_cache_dir()
+        self.assertTrue(cache.is_dir())
+        self.assertEqual(cache.name, "AlphaGen")
+
+        # 2. ALPHAGEN_CACHE_DIR override
+        custom = self.job / "custom_cache"
+        os.environ["ALPHAGEN_CACHE_DIR"] = str(custom)
+        try:
+            self.assertEqual(get_nuke_cache_dir(), custom.resolve())
+            self.assertEqual(get_jobs_root(), custom.resolve())
+        finally:
+            os.environ.pop("ALPHAGEN_CACHE_DIR", None)
+
 
 if __name__ == "__main__":
     unittest.main()

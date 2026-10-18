@@ -11,6 +11,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from contextlib import contextmanager
 
@@ -51,10 +52,44 @@ def write_json(path, data):
         raise
 
 
+def get_jobs_root() -> Path:
+    override = os.environ.get("ALPHAGEN_CACHE_DIR")
+    if override and override.strip():
+        p = Path(override.strip()).resolve()
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+    env_temp = os.environ.get("NUKE_TEMP_DIR")
+    if env_temp and env_temp.strip():
+        p = Path(env_temp.strip()).resolve() / "AlphaGen"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+    try:
+        p = Path(tempfile.gettempdir()).resolve() / "nuke" / "AlphaGen"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+    except Exception:
+        pass
+    fallback = ROOT / "jobs"
+    fallback.mkdir(parents=True, exist_ok=True)
+    return fallback
+
+
 def job_path(value):
     path = Path(value).resolve()
-    if not path.is_relative_to((ROOT / "jobs").resolve()):
-        raise ValueError("Jobs must be inside AlphaGen/jobs")
+    jobs_root = get_jobs_root().resolve()
+    legacy_root = (ROOT / "jobs").resolve()
+    temp_root = Path(tempfile.gettempdir()).resolve()
+
+    is_allowed = False
+    for root in (jobs_root, legacy_root, temp_root):
+        try:
+            if path.is_relative_to(root):
+                is_allowed = True
+                break
+        except Exception:
+            pass
+    if not is_allowed or path == ROOT or path == ROOT.parent or path == path.parent:
+        raise ValueError(f"Job path '{path}' must be inside an approved cache or jobs directory")
     return path
 
 
@@ -244,7 +279,9 @@ def run_inference(job, config):
 @contextmanager
 def gpu_lock():
     """OS lock is automatically released if the worker exits or crashes."""
-    with (ROOT / "jobs/gpu.lock").open("a+b") as lock:
+    lock_file = get_jobs_root() / "gpu.lock"
+    lock_file.parent.mkdir(parents=True, exist_ok=True)
+    with lock_file.open("a+b") as lock:
         lock.seek(0)
         lock.write(b"0")
         lock.flush()
