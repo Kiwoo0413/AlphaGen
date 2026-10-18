@@ -148,6 +148,7 @@ pip install -r requirements.txt
 > 이미 PC에 PyTorch와 CUDA가 설치되어 있거나 ComfyUI 등의 AI 환경(`D:/AI/ComfyUI_DATA/.venv` 등)이 있다면 별도로 가상환경을 만들 필요 없이 위 명령어만 실행하면 즉시 준비가 완료됩니다.
 
 주요 패키지 요약:
+
 - **Deep Learning**: `torch>=2.1.0`, `torchvision>=0.16.0` (CUDA 지원 필수)
 - **Vision & SAM2 Models**: `transformers>=4.45.0` (Sam2Model 지원 버전), `accelerate>=0.26.0`, `safetensors>=0.4.0`
 - **Video & Image I/O**: `opencv-python>=4.8.0` (무손실 FFV1 코덱 지원), `Pillow>=10.0.0`, `numpy>=1.24.0`
@@ -164,7 +165,7 @@ AlphaGen이 외부 API 및 GPU 런타임을 올바르게 찾을 수 있도록 �
 | **`GEMINI_API_KEY`** | **필수** | VLM 공간 객체 그라운딩(BBox 추출)을 위한 Google AI Studio API 키 | `AIzaSyD...` |
 | **`ALPHAGEN_PYTHON`** | 선택 | AI 백엔드 Python 실행기 경로 (미설정 시 `ComfyUI` venv 또는 시스템 python 자동 탐색) | `D:\AI\ComfyUI_DATA\.venv\Scripts\python.exe` |
 | **`ALPHAGEN_MODELS_DIR`** | 선택 | LTX 모델 가중치가 위치한 기본 디렉토리 경로 (미설정 시 드라이브 자동 탐색) | `D:\AI\Models` |
-| **`ALPHAGEN_CACHE_DIR`** | 선택 | 임시 연산 작업 캐시 경로 (미설정 시 Nuke `Preferences.localCachePath` / `NUKE_TEMP_DIR` / 시스템 임시 폴더 자동 연동) | `D:\NukeCache\AlphaGen` |
+| **`ALPHAGEN_CACHE_DIR`** | 선택 | Nuke `Preferences.localCachePath` / `NUKE_TEMP_DIR` / 시스템 임시 폴더 자동 연동 | `D:\NukeCache\AlphaGen` |
 
 > [!NOTE]
 > **API 키 설정 방법**:
