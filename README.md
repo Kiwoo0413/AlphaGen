@@ -8,23 +8,16 @@ Foundry Nuke 기즈모 환경에서 완벽하게 구동되며, 향후 웹 UI(Fas
 
 ## 🏗️ 시스템 아키텍처 (Pipeline Architecture)
 
-$$\begin{matrix}
-\text{첫 프레임 + 사용자 자연어 요청} \\
-\downarrow \\
-\textbf{VLM 객체 그라운딩 (Gemini Flash)} \quad\to\quad \text{2D BBox [ymin, xmin, ymax, xmax] \& 대상 텍스트 설명} \\
-\downarrow \\
-\textbf{로컬 SAM2.1 (Hiera-Large)} \quad\to\quad \text{참조 프레임 픽셀 단위 초기 분할 마스크} \\
-\downarrow \\
-\textbf{Nuke 뷰어 사전 검증} \quad\to\quad \text{‘Target Selection (VLM)’ 뷰에서 1~2초 내 즉시 확인} \\
-\downarrow \\
-\textbf{대상 조건 처리 (LTX Alpha)} \quad\to\quad \text{Attention Mask (공간 제어) + Prompt Embedding (의미 제어)} \\
-\downarrow \\
-\textbf{LTX-2.5 IC-LoRA 인퍼런스} \quad\to\quad \text{멀티프레임 원시 알파 생성 (49프레임 청크 / 17프레임 코사인 오버랩)} \\
-\downarrow \\
-\textbf{CompMatte CPU 정제} \quad\to\quad \text{Density Curve + Core Solidification + Edge Restoration} \\
-\downarrow \\
-\textbf{최종 합성용 알파 및 RGBA 출력}
-\end{matrix}$$
+```mermaid
+flowchart TD
+    A["첫 프레임 + 사용자 자연어 프롬프트"] --> B["Step 1-1. VLM 객체 그라운딩 (Gemini Flash)<br/>2D BBox 및 대상 텍스트 설명"]
+    B --> C["Step 1-2. 로컬 SAM 2.1 (Hiera-Large)<br/>참조 프레임 1.2배 확장 픽셀 분할 마스크"]
+    C --> D["Nuke 뷰어 사전 검증<br/>'Target Selection (VLM)' 뷰에서 즉시 확인"]
+    D --> E["Step 2-1. 대상 조건 처리 (LTX Alpha Conditioning)<br/>공간 Attention Mask + Prompt Embedding"]
+    E --> F["Step 2-2. LTX-2.5 IC-LoRA 인퍼런스<br/>49프레임 청크 & 17프레임 코사인 오버랩 무제한 연속 생성"]
+    F --> G["Step 3. CompMatte CPU 정제 엔진<br/>밀리초 단위 Core Solidification + Edge Restoration"]
+    G --> H["Step 4. 최종 합성용 알파 및 RGBA 출력<br/>Final Alpha / Raw LTX Alpha / Premultiplied RGBA"]
+```
 
 ---
 
