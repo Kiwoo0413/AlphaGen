@@ -559,22 +559,28 @@ def refine_cached(node):
 def load_result(node, path):
     configure_graph(node)
     data = _read(path)
-    for name in ("raw", "final", "core", "edge"):
-        pattern = data[name + "_pattern"]
+    for name in ("raw", "final"):
+        pattern = data.get(name + "_pattern", "")
         for frame in range(data["first"], data["last"] + 1):
             if not Path(pattern % frame).is_file():
                 raise ValueError(f"Missing {name} frame {frame}")
     for name in ("raw", "final", "core", "edge"):
         reader = node.node("Read_" + name)
-        if reader:
-            reader["file"].setValue(data[name + "_pattern"])
-            reader["first"].setValue(data["first"])
-            reader["last"].setValue(data["last"])
-            reader["origfirst"].setValue(data["first"])
-            reader["origlast"].setValue(data["last"])
-            reader["raw"].setValue(True)
-            reader["on_error"].setValue("black")
-            reader["reload"].execute()
+        pattern = data.get(name + "_pattern", "")
+        if reader and pattern:
+            first_frame_file = Path(pattern % data["first"]) if "%" in pattern else Path(pattern)
+            if first_frame_file.is_file():
+                reader["file"].setValue(pattern)
+                reader["first"].setValue(data["first"])
+                reader["last"].setValue(data["last"])
+                reader["origfirst"].setValue(data["first"])
+                reader["origlast"].setValue(data["last"])
+                reader["raw"].setValue(True)
+                reader["on_error"].setValue("black")
+                reader["reload"].execute()
+            else:
+                reader["file"].setValue("")
+                reader["on_error"].setValue("black")
     if "result_path" in node.knobs():
         node["result_path"].setValue(str(Path(path).resolve()).replace("\\", "/"))
     if data.get("vlm_mask_path") and Path(data["vlm_mask_path"]).is_file():

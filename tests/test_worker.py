@@ -71,10 +71,13 @@ class WorkerTests(unittest.TestCase):
         meta = export_raw(self.job, alpha, 1001, output_dir=custom_alpha_dir)
         self.assertTrue((custom_alpha_dir / "raw/alpha.001001.png").is_file())
         bake(self.job, meta, {}, output_dir=custom_alpha_dir)
-        self.assertTrue((custom_alpha_dir / "alpha.001001.png").is_file())
+        self.assertTrue((custom_alpha_dir / "final/alpha.001001.png").is_file())
+        self.assertTrue((custom_alpha_dir / "raw/alpha.001001.png").is_file())
+        self.assertFalse((custom_alpha_dir / "core").exists())
+        self.assertFalse((custom_alpha_dir / "edge").exists())
         self.assertTrue((custom_alpha_dir / "result.json").is_file())
         res = json.loads((custom_alpha_dir / "result.json").read_text())
-        self.assertIn("source_shot/alpha", res["final_pattern"].replace("\\", "/"))
+        self.assertIn("source_shot/alpha/final", res["final_pattern"].replace("\\", "/"))
 
 
     def test_cancel_pid_and_status(self):

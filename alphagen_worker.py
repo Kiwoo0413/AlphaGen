@@ -153,10 +153,14 @@ def bake(job, metadata, settings, output_dir=None):
     s.validate()
     target = Path(output_dir) if output_dir else job
     target.mkdir(parents=True, exist_ok=True)
-    for name in ("final", "core", "edge"):
-        (target / name).mkdir(parents=True, exist_ok=True)
-        if target != job:
-            (job / name).mkdir(parents=True, exist_ok=True)
+    # 1. Permanent production subdirectories in target: ONLY final/ (raw/ was saved by export_raw)
+    (target / "final").mkdir(parents=True, exist_ok=True)
+    if target != job:
+        (job / "final").mkdir(parents=True, exist_ok=True)
+    # 2. Ephemeral internal cache in job: core/ & edge/
+    (job / "core").mkdir(parents=True, exist_ok=True)
+    (job / "edge").mkdir(parents=True, exist_ok=True)
+
     metrics = []
     start = time.monotonic()
     total_frames = max(1, metadata["last"] - metadata["first"] + 1)
@@ -167,22 +171,22 @@ def bake(job, metadata, settings, output_dir=None):
             status(job, "refining", f"Refining frame {frame}/{metadata['last']}", progress=prog)
         raw = read_alpha(metadata["raw_pattern"] % frame)
         output = refine(raw, s)
-        # 1. Primary final alpha directly in target / alpha.XXXXXX.png
-        save_alpha(target / f"alpha.{frame:06d}.png", output["final"])
-        # 2. Layer subdirectories (final, core, edge)
-        for name in ("final", "core", "edge"):
-            save_alpha(target / name / f"alpha.{frame:06d}.png", output[name])
-            if target != job:
-                save_alpha(job / name / f"alpha.{frame:06d}.png", output[name])
+        # 1. Save final alpha directly to target / final / alpha.XXXXXX.png
+        save_alpha(target / "final" / f"alpha.{frame:06d}.png", output["final"])
+        if target != job:
+            save_alpha(job / "final" / f"alpha.{frame:06d}.png", output["final"])
+        # 2. Ephemeral core and edge saved ONLY to job cache
+        save_alpha(job / "core" / f"alpha.{frame:06d}.png", output["core"])
+        save_alpha(job / "edge" / f"alpha.{frame:06d}.png", output["edge"])
         metrics.append({"frame": frame,
                         "raw_mean": float(raw.mean()), "final_mean": float(output["final"].mean()),
                         "core_pixels": int((output["core"] >= 0.999).sum()),
                         "raw_background_below_clip_mean": float(raw[raw <= s.black_clip].mean()) if (raw <= s.black_clip).any() else None,
                         "final_background_below_clip_mean": float(output["final"][raw <= s.black_clip].mean()) if (raw <= s.black_clip).any() else None})
     result = dict(metadata)
-    result["final_pattern"] = (target / "alpha.%06d.png").as_posix()
-    result["core_pattern"] = (target / "core" / "alpha.%06d.png").as_posix()
-    result["edge_pattern"] = (target / "edge" / "alpha.%06d.png").as_posix()
+    result["final_pattern"] = (target / "final" / "alpha.%06d.png").as_posix()
+    result["core_pattern"] = (job / "core" / "alpha.%06d.png").as_posix()
+    result["edge_pattern"] = (job / "edge" / "alpha.%06d.png").as_posix()
     result.update(settings=asdict(s), refinement_seconds=time.monotonic() - start,
                   metrics=metrics, job=job.as_posix(), output_dir=target.as_posix())
     write_json(job / "result.json", result)
