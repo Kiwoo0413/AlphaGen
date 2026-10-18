@@ -57,7 +57,22 @@ class WorkerTests(unittest.TestCase):
 
     def test_reject_invalid_frame_count_before_export(self):
         with self.assertRaises(ValueError):
-            prepare_input(self.job, {"first": 1, "last": 10})
+            prepare_input(self.job, {"first": 10, "last": 5})
+
+    def test_prepare_input_pads_arbitrary_frames(self):
+        # 10 frames (1001..1010) should be padded to 17 frames (next 8n+1)
+        for frame in range(1001, 1011):
+            source = np.full((40, 80, 3), 128, np.uint8)
+            cv2.imwrite(str(self.job / f"source.{frame:06d}.png"), source)
+            mask = np.zeros((40, 80), np.float32)
+            mask[10:30, 20:60] = 1
+            save_alpha(self.job / f"mask.{frame:06d}.png", mask)
+        request = {"first": 1001, "last": 1010, "fps": 24, "max_side": 80,
+                   "source_pattern": str(self.job / "source.%06d.png"),
+                   "mask_pattern": str(self.job / "mask.%06d.png")}
+        manifest = prepare_input(self.job, request)
+        self.assertEqual(manifest["requested_frames"], 10)
+        self.assertEqual(manifest["frames"], 17)
 
     def test_cancel_before_any_alpha_write(self):
         (self.job / "cancel.request").write_text("cancel")
@@ -144,7 +159,7 @@ class WorkerTests(unittest.TestCase):
         gizmo = MockGizmo(source)
         sync_source_range(gizmo)
         self.assertEqual(gizmo["first"].value(), 1)
-        self.assertEqual(gizmo["last"].value(), 233)
+        self.assertEqual(gizmo["last"].value(), 240)
         self.assertGreater(gizmo["last"].value(), 121)
 
 

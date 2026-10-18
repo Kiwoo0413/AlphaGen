@@ -149,25 +149,21 @@ def get_upstream_range(upstream):
 
 
 def sync_source_range(node):
-    """Automatically detect and set the valid 8n+1 frame range from Source input."""
+    """Automatically detect and set the exact frame range from Source input."""
     source = node.input(0)
     if not source:
         return
     f, l = get_upstream_range(source)
-    total = max(1, l - f + 1)
-    # LTX requires temporal factor 8n + 1 (unconstrained via 49-frame chunking pipeline)
-    n_steps = max(1, (total - 1) // 8)
-    valid_count = n_steps * 8 + 1
-    valid_last = f + valid_count - 1
 
     if "first" in node.knobs():
         node["first"].setValue(f)
     if "last" in node.knobs():
-        node["last"].setValue(valid_last)
+        node["last"].setValue(l)
     if "ag_ref_frame" in node.knobs():
         node["ag_ref_frame"].setValue(f)
 
-    set_status(node, f"Frame Range auto-set to {f}–{valid_last} ({valid_count} frames, 8n+1)")
+    total = max(1, l - f + 1)
+    set_status(node, f"Frame Range auto-set to {f}–{l} ({total} frames)")
 
 
 def get_source_file_path(upstream):
@@ -546,9 +542,8 @@ def load_vlm_preview(node, mask_path):
 def generate(node):
     nuke = _nuke()
     first, last = int(node["first"].value()), int(node["last"].value())
-    count = last - first + 1
-    if count < 9 or (count - 1) % 8:
-        raise ValueError("Use 8n+1 frames (9, 17, 25, 33, 41, 49, 97, 121, 241...). LTX requires temporal factor 8n+1.")
+    if last < first:
+        raise ValueError(f"Last frame ({last}) must be greater than or equal to first frame ({first}).")
     if not node.input(0):
         raise ValueError("Connect Source RGB input.")
 

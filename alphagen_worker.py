@@ -307,9 +307,18 @@ def gpu_lock():
 
 def prepare_input(job, request):
     first, last = request["first"], request["last"]
-    count = last - first + 1
-    if count < 9 or (count - 1) % 8:
-        raise ValueError("Frame count must be 8n+1, at least 9 frames")
+    raw_count = last - first + 1
+    if raw_count < 1:
+        raise ValueError("Invalid frame range: last frame must be >= first frame")
+    # LTX Causal VAE requires (frames - 1) % 8 == 0 with a minimum of 9 frames.
+    # If the user requests an off-grid count, we pad to the next causal grid boundary.
+    if raw_count < 9:
+        padded_count = 9
+    elif (raw_count - 1) % 8 != 0:
+        padded_count = ((raw_count - 1) // 8 + 1) * 8 + 1
+    else:
+        padded_count = raw_count
+
     fps = float(request["fps"])
     side = int(request.get("max_side", 512))
     if not math.isfinite(fps) or fps <= 0 or side < 64 or side > 1024:
@@ -329,6 +338,8 @@ def prepare_input(job, request):
             writer.release()
         raise RuntimeError("Lossless FFV1 writer unavailable")
     try:
+        last_image_canvas = None
+        last_mask_canvas = None
         for frame in range(first, last + 1):
             cancelled(job)
             image = cv2.imread(source_pattern % frame, cv2.IMREAD_COLOR)
@@ -346,6 +357,14 @@ def prepare_input(job, request):
             mask_canvas = np.zeros((ph, pw), np.uint8)
             mask_canvas[:rh, :rw] = np.round(cv2.resize(mask, (rw, rh), interpolation=cv2.INTER_LINEAR) * 255).astype(np.uint8)
             writers[1].write(cv2.cvtColor(mask_canvas, cv2.COLOR_GRAY2BGR))
+            last_image_canvas = canvas
+            last_mask_canvas = mask_canvas
+
+        # Seamless causal grid padding: repeat final frame up to padded_count
+        for _ in range(padded_count - raw_count):
+            cancelled(job)
+            writers[0].write(last_image_canvas)
+            writers[1].write(cv2.cvtColor(last_mask_canvas, cv2.COLOR_GRAY2BGR))
     finally:
         for writer in writers:
             writer.release()
@@ -355,11 +374,12 @@ def prepare_input(job, request):
         while reader.read()[0]:
             decoded += 1
         reader.release()
-        if decoded != count:
+        if decoded != padded_count:
             raise RuntimeError("Prepared video frame count mismatch")
     manifest = {"prepared_video": paths[0].as_posix(), "prepared_size": [pw, ph],
                 "resized_content_size": [rw, rh], "source_size": [w, h],
-                "source_fps": fps, "frames": count, "seed": int(request.get("seed", 1234))}
+                "source_fps": fps, "frames": padded_count, "requested_frames": raw_count,
+                "seed": int(request.get("seed", 1234))}
     write_json(job / "manifest.json", manifest)
     return manifest
 
@@ -451,6 +471,10 @@ def main():
             alpha = cached_alpha(job / "results/generic_alpha.decoded.0.pt")
             if len(alpha) != manifest["frames"]:
                 raise ValueError("Generated alpha frame count mismatch")
+            # If the video was padded for LTX Causal VAE, crop back to user's exact requested frame count
+            req_frames = manifest.get("requested_frames", manifest["frames"])
+            if len(alpha) > req_frames:
+                alpha = alpha[:req_frames]
             metadata = export_raw(job, alpha, request["first"], manifest["resized_content_size"], manifest["source_size"], output_dir=output_dir)
             metadata.update(source_manifest=(job / "manifest.json").as_posix(),
                             resolution_note="LTX working resolution upscaled to source; no new detail recovered")

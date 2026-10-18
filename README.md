@@ -75,7 +75,7 @@ AlphaGen/
    - **Mask Expansion**: SAM 분할 마스크 외곽 자동 확장 비율 (기본값: `1.2배`, 피사체 움직임/헤어/모션 블러 여유 공간 확보)
    - **[🔍 Analyze Target (VLM)]**: 1~2초 내에 BBox 그라운딩 및 SAM2 마스크 추출 후 1.2배 자동 확장 (완료 시 뷰어 자동 전환)
 2. **Step 2. LTX ALPHA VIDEO GENERATION**:
-   - **First / Last**: 생성할 프레임 구간 설정 (기존 121프레임 한계를 해제하고 **49프레임 청크 분할 및 17프레임 코사인 오버랩 파이프라인**을 적용하여 수백~수천 프레임 롱테이크도 VRAM 초과 없이 끊김 없이 생성)
+   - **First / Last**: 생성할 프레임 구간 설정 (기존 121프레임 및 $8n+1$ 수동 계산 제약을 전면 해제하여 200, 300, 1000프레임 등 원본 샷 길이 그대로 1프레임 누락 없이 100% 생성. 내부적으로 끝 프레임을 다음 $8n+1$ 경계까지 임시 자동 패딩 후 요청된 프레임 수로 정밀 크롭)
    - **[🚀 Generate Alpha Video]**: 백그라운드 LTX 비디오 디퓨전 생성 실행
    - **[⏹ Stop Queue (중단)]**: 백그라운드에서 실행 중인 큐 및 GPU/CPU 서브프로세스 트리(`taskkill /T /F`)를 즉시 강제 종료하고 VRAM 완전 회수
    - **실시간 프로그레스 바**: `[████████░░░░] 65% (LTX Denoising step 5/8)` 실시간 표시 및 작업 완료 시 결과 자동 연결
@@ -190,7 +190,7 @@ AlphaGen이 외부 API 및 GPU 런타임을 올바르게 찾을 수 있도록 �
 
 ```powershell
 python -m unittest discover tests
-# 결과: Ran 22 tests ... OK
+# 결과: Ran 23 tests ... OK
 ```
 
 ---
