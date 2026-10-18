@@ -78,8 +78,8 @@ AlphaGen/
    - **Mask Expansion**: SAM 분할 마스크 외곽 자동 확장 비율 (기본값: `1.2배`, 피사체 움직임/헤어/모션 블러 여유 공간 확보)
    - **[🔍 Analyze Target (VLM)]**: 1~2초 내에 BBox 그라운딩 및 SAM2 마스크 추출 후 1.2배 자동 확장 (완료 시 뷰어 자동 전환)
 2. **Step 2. LTX ALPHA VIDEO GENERATION**:
-   - First/Last 프레임(8n+1 그리드), 해상도(`max_side`), 시드 설정
    - **[🚀 Generate Alpha Video]**: 백그라운드 LTX 비디오 디퓨전 생성 실행
+   - **[⏹ Stop Queue (중단)]**: 백그라운드에서 실행 중인 큐 및 GPU/CPU 프로세스를 즉시 강제 종료하고 리소스 완전 해제
    - **실시간 프로그레스 바**: `[████████░░░░] 65% (LTX Denoising step 5/8)` 실시간 표시 및 작업 완료 시 결과 자동 연결
 3. **Step 3. MATTE REFINEMENT (CORE & EDGE)**:
    - 노드 프로퍼티에 직접 노출된 슬라이더로 즉시 조절:

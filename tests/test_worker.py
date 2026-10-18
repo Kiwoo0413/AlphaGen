@@ -77,5 +77,12 @@ class WorkerTests(unittest.TestCase):
         self.assertIn("source_shot/alpha", res["final_pattern"].replace("\\", "/"))
 
 
+    def test_cancel_pid_and_status(self):
+        import os
+        from alphagen_nuke import _is_pid_running
+        self.assertTrue(_is_pid_running(os.getpid()))
+        self.assertFalse(_is_pid_running(99999999))
+
+
 if __name__ == "__main__":
     unittest.main()

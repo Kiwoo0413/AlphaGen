@@ -23,6 +23,7 @@ except ImportError:
 
 ROOT = Path(__file__).resolve().parent
 ACTIVE_TIMERS: dict[str, QtCore.QTimer] = {}
+ACTIVE_PROCESSES: dict[str, subprocess.Popen] = {}
 
 SETTING_DEFAULTS = {
     "black_clip": 0.05, "white_clip": 0.95, "gamma": 1.0,
@@ -86,6 +87,8 @@ def create(show_panel=True):
 def configure_graph(node):
     """Apply fixes and configure internal gizmo nodes."""
     node["onCreate"].setValue("import alphagen_nuke; alphagen_nuke.restore_saved(nuke.thisNode())")
+    if "cancel" in node.knobs():
+        node["cancel"].setLabel("<b><font color='#FF5252'>⏹ Stop Queue (중단)</font></b>")
     for name in ("AddCore", "RemoveGarbage"):
         merge = node.node(name)
         if merge:
@@ -323,12 +326,50 @@ def handle_vlm_complete(node, res_data):
     set_status(node, f"Target Ready: {res_data.get('target_description', '')} (Expanded {exp_ratio:.1f}x)")
 
 
+def _is_pid_running(pid):
+    if not pid:
+        return False
+    if os.name == "nt":
+        try:
+            res = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+                capture_output=True, text=True,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            )
+            return str(pid) in res.stdout
+        except Exception:
+            return False
+    else:
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
+
+
 def _new_job(node, mode):
     old = node["job_path"].value() if "job_path" in node.knobs() else ""
     if old and (Path(old) / "status.json").is_file():
-        state = _read(Path(old) / "status.json")["state"]
+        state = _read(Path(old) / "status.json").get("state", "complete")
         if state in ("queued", "preparing", "generating", "importing", "refining", "analyzing"):
-            raise RuntimeError("This node already has a running job. Cancel it or wait for completion.")
+            pid_file = Path(old) / "worker.pid"
+            is_alive = False
+            if pid_file.is_file():
+                try:
+                    pid = int(pid_file.read_text(encoding="utf-8").strip())
+                    is_alive = _is_pid_running(pid)
+                except Exception:
+                    pass
+            if is_alive:
+                raise RuntimeError("This node already has a running job. Click 'Stop Queue (중단)' or wait for completion.")
+            else:
+                try:
+                    (Path(old) / "status.json").write_text(
+                        json.dumps({"state": "cancelled", "message": "Previous job was aborted"}),
+                        encoding="utf-8"
+                    )
+                except Exception:
+                    pass
     job = ROOT / "jobs" / (mode + "_" + uuid.uuid4().hex[:12])
     job.mkdir(parents=True, exist_ok=False)
     if "job_path" in node.knobs():
@@ -351,10 +392,12 @@ def _launch(node, job, request, job_mode):
     (job / "temp").mkdir(exist_ok=True)
     env["TMP"] = env["TEMP"] = str(job / "temp")
     try:
-        with (job / "worker.log").open("w", encoding="utf-8") as log:
-            subprocess.Popen([str(python), "-u", str(ROOT / "alphagen_worker.py"), str(job / "request.json")],
-                             cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT,
-                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        log = (job / "worker.log").open("w", encoding="utf-8")
+        proc = subprocess.Popen([str(python), "-u", str(ROOT / "alphagen_worker.py"), str(job / "request.json")],
+                                cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT,
+                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        (job / "worker.pid").write_text(str(proc.pid), encoding="utf-8")
+        ACTIVE_PROCESSES[node.fullName()] = proc
     except Exception as exc:
         (job / "status.json").write_text(json.dumps({"state": "failed", "message": str(exc)}), encoding="utf-8")
         raise
@@ -547,14 +590,67 @@ def load_result(node, path):
 
 
 def cancel(node):
+    node_name = node.fullName()
     job_str = node["job_path"].value() if "job_path" in node.knobs() else ""
-    if not job_str:
-        return
-    job = Path(job_str).resolve()
-    if not job.is_relative_to((ROOT / "jobs").resolve()):
-        raise ValueError("No AlphaGen job selected")
-    (job / "cancel.request").write_text("cancel", encoding="utf-8")
-    update_progress_ui(node, 0.0, "Cancellation requested...")
+    job = Path(job_str).resolve() if job_str else None
+
+    # 1. Stop background UI QTimer monitor
+    if node_name in ACTIVE_TIMERS:
+        try:
+            ACTIVE_TIMERS[node_name].stop()
+        except Exception:
+            pass
+        ACTIVE_TIMERS.pop(node_name, None)
+
+    # 2. Write cancel request file for graceful checkpoint exit
+    if job and job.is_dir():
+        try:
+            (job / "cancel.request").write_text("cancel", encoding="utf-8")
+        except Exception:
+            pass
+
+    # 3. Terminate running worker process tree immediately
+    proc = ACTIVE_PROCESSES.pop(node_name, None)
+    pid = None
+    if proc:
+        pid = proc.pid
+    elif job and (job / "worker.pid").is_file():
+        try:
+            pid = int((job / "worker.pid").read_text(encoding="utf-8").strip())
+        except Exception:
+            pass
+
+    killed = False
+    if pid and _is_pid_running(pid):
+        try:
+            if os.name == "nt":
+                subprocess.run(
+                    ["taskkill", "/PID", str(pid), "/T", "/F"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                )
+            else:
+                import signal
+                os.kill(pid, signal.SIGKILL)
+            killed = True
+        except Exception:
+            pass
+
+    # 4. Mark status.json as cancelled to unblock next jobs immediately
+    if job and job.is_dir():
+        try:
+            (job / "status.json").write_text(
+                json.dumps({"state": "cancelled", "progress": 0.0, "message": "Queue stopped by user"}, indent=2),
+                encoding="utf-8"
+            )
+        except Exception:
+            pass
+
+    # 5. Update UI progress and status
+    msg = "⏹ Queue Terminated by User" if killed else "⏹ Queue Stopped"
+    update_progress_ui(node, 0.0, msg)
+    set_status(node, "Queue cancelled by user. Ready for next task.")
 
 
 def action(node, name):
@@ -564,6 +660,7 @@ def action(node, name):
             "generate": generate,
             "refine": refine_cached,
             "cancel": cancel,
+            "stop": cancel,
         }[name](node)
     except Exception as exc:
         set_status(node, "Error: " + str(exc))

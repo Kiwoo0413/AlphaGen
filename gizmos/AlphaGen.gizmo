@@ -18,6 +18,7 @@ Gizmo {
  addUserKnob {7 ag_mask_expand l "Mask Expansion" R 1 2}
  ag_mask_expand 1.2
  addUserKnob {22 ag_btn_vlm l "<b><font color='#2196F3'>🔍 Analyze Target (VLM)</font></b>" T "import alphagen_nuke; alphagen_nuke.action(nuke.thisNode(), 'vlm')" +STARTLINE}
+ addUserKnob {22 ag_btn_vlm_stop l "<b><font color='#FF5252'>⏹ Stop</font></b>" T "import alphagen_nuke; alphagen_nuke.action(nuke.thisNode(), 'cancel')" -STARTLINE}
  addUserKnob {1 ag_target_info l "Target Info" +READONLY}
  ag_target_info "Ready — enter prompt and click Analyze Target"
 
@@ -32,7 +33,7 @@ Gizmo {
  addUserKnob {3 seed l Seed}
  seed 1234
  addUserKnob {22 generate l "<b><font color='#4CAF50'>🚀 Generate Alpha Video</font></b>" T "import alphagen_nuke; alphagen_nuke.action(nuke.thisNode(), 'generate')" +STARTLINE}
- addUserKnob {22 cancel l "⏹ Cancel" T "import alphagen_nuke; alphagen_nuke.action(nuke.thisNode(), 'cancel')"}
+ addUserKnob {22 cancel l "<b><font color='#FF5252'>⏹ Stop Queue (중단)</font></b>" T "import alphagen_nuke; alphagen_nuke.action(nuke.thisNode(), 'cancel')" -STARTLINE}
  addUserKnob {26 ag_progress_bar l "" T "<div style='background-color:#222; border-radius:4px; height:20px; border:1px solid #444; width:100%; text-align:center; color:#888; font-size:11px; line-height:20px; font-weight:bold;'>Ready</div>"}
  addUserKnob {1 ag_status_label l Status +READONLY}
  ag_status_label "Ready"
@@ -66,6 +67,7 @@ Gizmo {
  feather 0.35
 
  addUserKnob {22 bake l "<b><font color='#FF9800'>⚡ Update Matte (CPU)</font></b>" T "import alphagen_nuke; alphagen_nuke.action(nuke.thisNode(), 'refine')" +STARTLINE}
+ addUserKnob {22 ag_btn_refine_stop l "<b><font color='#FF5252'>⏹ Stop</font></b>" T "import alphagen_nuke; alphagen_nuke.action(nuke.thisNode(), 'cancel')" -STARTLINE}
 
  addUserKnob {26 sec_4 l "" T "<br><b><font size='3' color='#90CAF9'>4. OUTPUT & VIEW MODE</font></b>"}
  addUserKnob {4 view_mode l View M {"Final alpha" "Raw LTX alpha" "Target Selection (VLM)" "Core" "Edge" "Source with alpha" "Premultiplied RGBA"}}

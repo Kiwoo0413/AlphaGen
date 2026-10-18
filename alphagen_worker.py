@@ -303,6 +303,10 @@ def main():
     parser.add_argument("request", type=Path)
     args = parser.parse_args()
     job = job_path(args.request.parent)
+    try:
+        (job / "worker.pid").write_text(str(os.getpid()), encoding="utf-8")
+    except Exception:
+        pass
     request = read_json(args.request)
     started = time.monotonic()
     try:
