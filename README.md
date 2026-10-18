@@ -190,7 +190,7 @@ AlphaGen이 외부 API 및 GPU 런타임을 올바르게 찾을 수 있도록 �
 
 ```powershell
 python -m unittest discover tests
-# 결과: Ran 21 tests ... OK
+# 결과: Ran 22 tests ... OK
 ```
 
 ---

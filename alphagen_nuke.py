@@ -121,30 +121,31 @@ def format_signature(node):
 
 def get_upstream_range(upstream):
     """Accurately extract start and end frame numbers from upstream node tree."""
-    nuke = _nuke()
-    if not upstream:
-        return int(nuke.root().firstFrame()), int(nuke.root().lastFrame())
+    if upstream:
+        # 1. Try Read node knobs directly
+        if hasattr(upstream, "knobs") and "first" in upstream.knobs() and "last" in upstream.knobs():
+            try:
+                f = int(upstream["first"].value())
+                l = int(upstream["last"].value())
+                if l >= f:
+                    return f, l
+            except Exception:
+                pass
 
-    # 1. Try Read node knobs directly
-    if "first" in upstream.knobs() and "last" in upstream.knobs():
+        # 2. Try standard node methods
         try:
-            f = int(upstream["first"].value())
-            l = int(upstream["last"].value())
+            f = int(upstream.firstFrame())
+            l = int(upstream.lastFrame())
             if l >= f:
                 return f, l
         except Exception:
             pass
 
-    # 2. Try standard node methods
     try:
-        f = int(upstream.firstFrame())
-        l = int(upstream.lastFrame())
-        if l >= f:
-            return f, l
+        nuke = _nuke()
+        return int(nuke.root().firstFrame()), int(nuke.root().lastFrame())
     except Exception:
-        pass
-
-    return int(nuke.root().firstFrame()), int(nuke.root().lastFrame())
+        return 1, 100
 
 
 def sync_source_range(node):
@@ -154,8 +155,8 @@ def sync_source_range(node):
         return
     f, l = get_upstream_range(source)
     total = max(1, l - f + 1)
-    # LTX requires temporal factor 8n + 1 (9, 17, 25, ... 121)
-    n_steps = max(1, min(15, (total - 1) // 8))
+    # LTX requires temporal factor 8n + 1 (unconstrained via 49-frame chunking pipeline)
+    n_steps = max(1, (total - 1) // 8)
     valid_count = n_steps * 8 + 1
     valid_last = f + valid_count - 1
 

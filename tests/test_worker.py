@@ -105,6 +105,48 @@ class WorkerTests(unittest.TestCase):
         finally:
             os.environ.pop("ALPHAGEN_CACHE_DIR", None)
 
+    def test_sync_source_range_allows_over_121_frames(self):
+        from alphagen_nuke import sync_source_range
+
+        class MockKnob:
+            def __init__(self, val=0):
+                self.val = val
+            def setValue(self, v):
+                self.val = v
+            def value(self):
+                return self.val
+
+        class MockSource:
+            def __init__(self, first=1, last=240):
+                self._knobs = {"first": MockKnob(first), "last": MockKnob(last)}
+            def knobs(self):
+                return self._knobs
+            def __getitem__(self, key):
+                return self._knobs[key]
+
+        class MockGizmo:
+            def __init__(self, src):
+                self._src = src
+                self._knobs = {
+                    "first": MockKnob(1),
+                    "last": MockKnob(1),
+                    "ag_ref_frame": MockKnob(1),
+                    "ag_status_label": MockKnob(""),
+                }
+            def knobs(self):
+                return self._knobs
+            def __getitem__(self, key):
+                return self._knobs[key]
+            def input(self, idx):
+                return self._src if idx == 0 else None
+
+        source = MockSource(first=1, last=240)
+        gizmo = MockGizmo(source)
+        sync_source_range(gizmo)
+        self.assertEqual(gizmo["first"].value(), 1)
+        self.assertEqual(gizmo["last"].value(), 233)
+        self.assertGreater(gizmo["last"].value(), 121)
+
 
 if __name__ == "__main__":
     unittest.main()
