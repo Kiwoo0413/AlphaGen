@@ -12,11 +12,11 @@ Gizmo {
 
  addUserKnob {26 sec_1 l "" T "<br><b><font size='3' color='#90CAF9'>1. TARGET SELECTION (VLM & SAM2)</font></b>"}
  addUserKnob {1 ag_prompt l "Target Prompt"}
- ag_prompt "중앙의 갈색 셔츠를 입은 인물"
+ ag_prompt "Write Prompt"
  addUserKnob {3 ag_ref_frame l "Ref Frame"}
  ag_ref_frame 1
  addUserKnob {7 ag_mask_expand l "Mask Expansion" R 1 2}
- ag_mask_expand 1.2
+ ag_mask_expand 1.1
  addUserKnob {22 ag_btn_vlm l "<b><font color='#2196F3'>🔍 Analyze Target (VLM)</font></b>" T "import alphagen_nuke; alphagen_nuke.action(nuke.thisNode(), 'vlm')" +STARTLINE}
  addUserKnob {22 ag_btn_vlm_stop l "<b><font color='#FF5252'>⏹ Stop</font></b>" T "import alphagen_nuke; alphagen_nuke.action(nuke.thisNode(), 'cancel')" -STARTLINE}
  addUserKnob {1 ag_target_info l "Target Info" +READONLY}
