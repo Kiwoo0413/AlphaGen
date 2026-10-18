@@ -109,7 +109,15 @@ def read_alpha(path):
 
 def cached_alpha(pt_path):
     import torch
-    tensor = torch.load(pt_path, map_location="cpu", weights_only=True)
+    pt_path = Path(pt_path)
+    parent = pt_path.parent
+    base_name = pt_path.name.split(".decoded.")[0]
+    chunk_files = sorted(parent.glob(f"{base_name}.decoded.*.pt"), key=lambda p: int(p.stem.split(".")[-1]))
+    if chunk_files:
+        tensors = [torch.load(p, map_location="cpu", weights_only=True) for p in chunk_files]
+        tensor = torch.cat(tensors, dim=0) if len(tensors) > 1 else tensors[0]
+    else:
+        tensor = torch.load(pt_path, map_location="cpu", weights_only=True)
     if not isinstance(tensor, torch.Tensor) or tensor.ndim != 4 or tensor.shape[-1] != 3:
         raise ValueError("Decoded cache must have shape T,H,W,3")
     # Official decoder cache is floating RGB in [0,1], before video compression.
@@ -259,8 +267,8 @@ def gpu_lock():
 def prepare_input(job, request):
     first, last = request["first"], request["last"]
     count = last - first + 1
-    if count < 9 or count > 121 or (count - 1) % 8:
-        raise ValueError("Frame count must be 8n+1, from 9 to 121")
+    if count < 9 or (count - 1) % 8:
+        raise ValueError("Frame count must be 8n+1, at least 9 frames")
     fps = float(request["fps"])
     side = int(request.get("max_side", 512))
     if not math.isfinite(fps) or fps <= 0 or side < 64 or side > 1024:

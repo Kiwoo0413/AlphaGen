@@ -489,8 +489,8 @@ def generate(node):
     nuke = _nuke()
     first, last = int(node["first"].value()), int(node["last"].value())
     count = last - first + 1
-    if count < 9 or count > 121 or (count - 1) % 8:
-        raise ValueError("Use 9, 17, 25, ... 121 frames (8n+1). LTX requires temporal factor 8n+1.")
+    if count < 9 or (count - 1) % 8:
+        raise ValueError("Use 8n+1 frames (9, 17, 25, 33, 41, 49, 97, 121, 241...). LTX requires temporal factor 8n+1.")
     if not node.input(0):
         raise ValueError("Connect Source RGB input.")
 

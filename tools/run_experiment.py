@@ -112,6 +112,16 @@ def main():
         "--offload", config["offload"], "--quantization", config["quantization"],
         "--output-path", str(output),
     ])
+    chunk_frames = config.get("chunk_pixel_frames", 49)
+    if chunk_frames and manifest["frames"] > chunk_frames:
+        carry = config.get("chunk_carry_frames", 17)
+        blend = config.get("chunk_blend_frames", carry)
+        command.extend([
+            "--chunked",
+            "--chunk-pixel-frames", str(chunk_frames),
+            "--chunk-carry-frames", str(carry),
+            "--chunk-blend-frames", str(blend),
+        ])
     mask_condition = config.get("conditioning_attention_mask")
     if mask_condition:
         mask_path = absolute(mask_condition["path"])

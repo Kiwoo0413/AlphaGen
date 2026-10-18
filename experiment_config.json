@@ -11,5 +11,8 @@
     "lora": "ltx-2.5-22b-ic-lora-alpha-gen-0.9.safetensors"
   },
   "offload": "disk",
-  "quantization": "fp8-cast"
+  "quantization": "fp8-cast",
+  "chunk_pixel_frames": 49,
+  "chunk_carry_frames": 17,
+  "chunk_blend_frames": 17
 }
