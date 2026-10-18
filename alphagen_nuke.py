@@ -746,9 +746,11 @@ def register():
 def demo():
     """Create test graph without replacing an open script."""
     nuke = _nuke()
-    result = ROOT / "jobs/demo_refine/result.json"
+    result = ROOT / "experiments/demo_refine/result.json"
     if not result.is_file():
-        raise ValueError("Demo cache not found")
+        result = ROOT / "jobs/demo_refine/result.json"
+    if not result.is_file():
+        raise ValueError("Demo fixture not found in experiments/demo_refine")
     source = nuke.nodes.Read(file=(ROOT / "experiments/001/input.avi").as_posix())
     source["first"].setValue(1)
     source["last"].setValue(17)

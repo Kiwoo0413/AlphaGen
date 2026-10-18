@@ -11,7 +11,7 @@ from alphagen_worker import ROOT, bake, export_raw, job_path, prepare_input, rea
 
 class WorkerTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(dir=ROOT / "jobs", prefix="test_")
+        self.temp = tempfile.TemporaryDirectory(prefix="test_")
         self.job = Path(self.temp.name)
 
     def tearDown(self):
