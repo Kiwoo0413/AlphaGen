@@ -11,17 +11,17 @@ Foundry Nuke 기즈모 환경에서 완벽하게 구동되며, 향후 웹 UI(Fas
 $$\begin{matrix}
 \text{첫 프레임 + 사용자 자연어 프롬프트} \\
 \downarrow \\
-\textbf{VLM 객체 그라운딩 (Gemini Flash)} \quad\to\quad \text{2D BBox [ymin, xmin, ymax, xmax] 및 대상 텍스트 설명} \\
+\textbf{VLM 객체 그라운딩 (Gemini Flash)} : \text{2D BBox [ymin, xmin, ymax, xmax] 및 대상 텍스트 설명} \\
 \downarrow \\
-\textbf{로컬 SAM2.1 (Hiera-Large)} \quad\to\quad \text{참조 프레임 1.2배 확장 픽셀 단위 초기 타겟 마스크} \\
+\textbf{로컬 SAM2.1 (Hiera-Large)} : \text{참조 프레임 1.2배 확장 픽셀 단위 초기 타겟 마스크} \\
 \downarrow \\
-\textbf{Nuke 뷰어 사전 검증} \quad\to\quad \text{'Target Selection (VLM)' 뷰에서 1~2초 내 즉시 확인} \\
+\textbf{Nuke 뷰어 사전 검증} : \text{'Target Selection (VLM)' 뷰에서 1~2초 내 즉시 확인} \\
 \downarrow \\
-\textbf{대상 조건 처리 (LTX Alpha)} \quad\to\quad \text{Attention Mask (공간 제어) + Prompt Embedding (의미 제어)} \\
+\textbf{대상 조건 처리 (LTX Alpha)} : \text{Attention Mask (공간 제어) + Prompt Embedding (의미 제어)} \\
 \downarrow \\
-\textbf{LTX-2.5 IC-LoRA 인퍼런스} \quad\to\quad \text{멀티프레임 원시 알파 생성 (49프레임 청크 / 17프레임 코사인 오버랩)} \\
+\textbf{LTX-2.5 IC-LoRA 인퍼런스} : \text{멀티프레임 원시 알파 생성 (49프레임 청크 / 17프레임 코사인 오버랩)} \\
 \downarrow \\
-\textbf{CompMatte CPU 정제} \quad\to\quad \text{Density Curve + Core Solidification + Edge Restoration} \\
+\textbf{CompMatte CPU 정제} : \text{Density Curve + Core Solidification + Edge Restoration} \\
 \downarrow \\
 \textbf{최종 합성용 알파 및 RGBA 출력}
 \end{matrix}$$
