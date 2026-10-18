@@ -302,7 +302,7 @@ def main():
     started = time.monotonic()
     try:
         cancelled(job)
-        Settings(**request.get("settings", {})).validate()
+        mode = request["mode"]
         output_dir = request.get("output_dir")
         if mode == "vlm":
             status(job, "analyzing", "Running VLM grounding & SAM2 segmentation...")
