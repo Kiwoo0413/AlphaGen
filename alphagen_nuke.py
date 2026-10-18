@@ -280,7 +280,10 @@ def start_job_monitor(node, job_path, job_mode):
                 return
 
             if status_file.is_file():
-                data = json.loads(status_file.read_text(encoding="utf-8"))
+                try:
+                    data = json.loads(status_file.read_text(encoding="utf-8"))
+                except Exception:
+                    return
                 state = data.get("state", "queued")
                 prog = float(data.get("progress", 0.0))
                 msg = data.get("message", state)

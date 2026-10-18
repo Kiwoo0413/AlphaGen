@@ -30,9 +30,25 @@ def read_json(path):
 
 def write_json(path, data):
     path = Path(path)
+    payload = json.dumps(data, indent=2, ensure_ascii=False)
     temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-    temporary.replace(path)
+    for attempt in range(10):
+        try:
+            temporary.write_text(payload, encoding="utf-8")
+            temporary.replace(path)
+            return
+        except (PermissionError, OSError) as exc:
+            winerror = getattr(exc, "winerror", None)
+            if winerror in (5, 32) or isinstance(exc, PermissionError):
+                time.sleep(0.05)
+            else:
+                raise
+    try:
+        path.write_text(payload, encoding="utf-8")
+    except Exception:
+        if path.name == "status.json":
+            return
+        raise
 
 
 def job_path(value):
@@ -138,8 +154,9 @@ def bake(job, metadata, settings, output_dir=None):
     total_frames = max(1, metadata["last"] - metadata["first"] + 1)
     for frame in range(metadata["first"], metadata["last"] + 1):
         cancelled(job)
-        prog = 0.85 + 0.14 * (frame - metadata["first"]) / total_frames
-        status(job, "refining", f"Refining frame {frame}", progress=prog)
+        if frame == metadata["first"] or frame == metadata["last"] or (frame - metadata["first"]) % 5 == 0:
+            prog = 0.85 + 0.14 * (frame - metadata["first"]) / total_frames
+            status(job, "refining", f"Refining frame {frame}/{metadata['last']}", progress=prog)
         raw = read_alpha(metadata["raw_pattern"] % frame)
         output = refine(raw, s)
         # 1. Primary final alpha directly in target / alpha.XXXXXX.png
