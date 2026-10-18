@@ -8,6 +8,7 @@ import json
 import math
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import time
@@ -51,10 +52,14 @@ def resolve_python(path_str=None):
         return str(Path(env_py))
     for c in [
         Path("D:/AI/ComfyUI_DATA/.venv/Scripts/python.exe"),
-        Path(sys.executable),
+        ROOT / ".venv/Scripts/python.exe",
+        ROOT / ".venv/bin/python",
     ]:
         if c.is_file():
             return str(c)
+    which_py = shutil.which("python")
+    if which_py and "nuke" not in which_py.lower():
+        return which_py
     return sys.executable
 
 
@@ -338,6 +343,25 @@ def main():
             metadata.update(source_manifest=request["manifest"], source_cache=request["decoded_cache"],
                             resolution_note="Prepared experiment resolution; not native source detail")
         elif mode == "generate":
+            mask_pattern = request.get("mask_pattern", "")
+            target_dir = Path(output_dir) if output_dir else job
+            target_dir.mkdir(parents=True, exist_ok=True)
+            vlm_mask_path = None
+            if not mask_pattern or not Path(mask_pattern).is_file():
+                status(job, "analyzing", "Analyzing target with VLM & SAM2...")
+                from alphagen_vlm import analyze_and_segment
+                ref_frame = request.get("reference_frame")
+                if not ref_frame or not Path(ref_frame).is_file():
+                    ref_frame = request["source_pattern"] % request["first"]
+                prompt = request.get("prompt", "")
+                expand_ratio = float(request.get("mask_expand", 1.2))
+                out_mask = target_dir / "vlm_initial_mask.png"
+                vlm_res = analyze_and_segment(ref_frame, prompt, output_mask_path=out_mask, expand_ratio=expand_ratio)
+                mask_pattern = out_mask.as_posix()
+                request["mask_pattern"] = mask_pattern
+                vlm_mask_path = mask_pattern
+                if "target_description" not in request:
+                    request["target_description"] = vlm_res.get("target_description")
             status(job, "preparing", "Preparing RGB and selection mask")
             manifest = prepare_input(job, request)
             config = read_json(ROOT / "experiment_config.json")
@@ -365,6 +389,8 @@ def main():
         bake(job, metadata, request.get("settings", {}), output_dir=output_dir)
         res_file = (Path(output_dir) / "result.json") if output_dir else (job / "result.json")
         result = read_json(res_file)
+        if vlm_mask_path:
+            result["vlm_mask_path"] = vlm_mask_path
         result["job_seconds"] = time.monotonic() - started
         write_json(res_file, result)
         if output_dir and Path(output_dir) != job:

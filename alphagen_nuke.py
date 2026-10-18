@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import shutil
 import uuid
 
 try:
@@ -50,12 +51,24 @@ def resolve_python():
         return Path(env_py)
     candidates = [
         Path("D:/AI/ComfyUI_DATA/.venv/Scripts/python.exe"),
-        Path(sys.executable),
+        ROOT / ".venv/Scripts/python.exe",
+        ROOT / ".venv/bin/python",
     ]
+    which_py = shutil.which("python")
+    if which_py and "nuke" not in which_py.lower():
+        candidates.append(Path(which_py))
     for c in candidates:
-        if c.is_file():
+        if c.is_file() and "nuke" not in str(c).lower():
             return c
-    return Path(sys.executable)
+    if "nuke" not in sys.executable.lower():
+        return Path(sys.executable)
+    raise RuntimeError(
+        "AlphaGen AI Python environment not found!\n"
+        "Please specify your Python executable in ~/.nuke/init.py:\n"
+        "os.environ['ALPHAGEN_PYTHON'] = r'C:/path/to/python.exe'\n"
+        "or install AlphaGen requirements into your environment:\n"
+        "pip install -r requirements.txt"
+    )
 
 
 def create(show_panel=True):
@@ -463,15 +476,9 @@ def generate(node):
         if not vlm_mask or not Path(vlm_mask).is_file():
             ref_frame = int(node["ag_ref_frame"].value()) if "ag_ref_frame" in node.knobs() else first
             ref_img = job / "exports/ref_frame.png"
+            update_progress_ui(node, 0.08, "Exporting reference frame for VLM grounding...")
             _export(node.input(0), ref_img, ref_frame, ref_frame)
-            update_progress_ui(node, 0.1, "Grounding Target with VLM & SAM2...")
-            from alphagen_vlm import analyze_and_segment
-            vlm_out = (Path(alpha_dir) / "vlm_initial_mask.png") if alpha_dir else (job / "vlm_initial_mask.png")
-            vlm_res = analyze_and_segment(ref_img, prompt, output_mask_path=vlm_out, expand_ratio=mask_expand)
-            mask_pattern = vlm_res["mask_path"]
-            if "vlm_mask_path" in node.knobs():
-                node["vlm_mask_path"].setValue(mask_pattern)
-            load_vlm_preview(node, mask_pattern)
+            mask_pattern = ""
         else:
             mask_pattern = vlm_mask
 
@@ -488,6 +495,8 @@ def generate(node):
         "mask_expand": mask_expand,
         "output_dir": alpha_dir,
     }
+    if not mask_pattern and not has_manual_selection:
+        request["reference_frame"] = ref_img.as_posix()
     _launch(node, job, request, job_mode="generate")
 
 
@@ -522,6 +531,10 @@ def load_result(node, path):
             reader["reload"].execute()
     if "result_path" in node.knobs():
         node["result_path"].setValue(str(Path(path).resolve()).replace("\\", "/"))
+    if data.get("vlm_mask_path") and Path(data["vlm_mask_path"]).is_file():
+        if "vlm_mask_path" in node.knobs():
+            node["vlm_mask_path"].setValue(data["vlm_mask_path"])
+        load_vlm_preview(node, data["vlm_mask_path"])
     node["has_result"].setValue(True)
     node["first"].setValue(data["first"])
     node["last"].setValue(data["last"])
