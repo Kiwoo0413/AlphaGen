@@ -56,12 +56,28 @@ class VLMModuleTests(unittest.TestCase):
         self.assertEqual(w, 48)  # 40 * 1.2 = 48
         self.assertEqual(h, 48)  # 40 * 1.2 = 48
 
+    def test_resolve_sam2_checkpoint(self):
+        from alphagen_vlm import resolve_sam2_checkpoint
+        ckpt = resolve_sam2_checkpoint()
+        self.assertTrue(isinstance(ckpt, (Path, str)))
+        if isinstance(ckpt, Path):
+            self.assertTrue(ckpt.exists())
+        else:
+            self.assertEqual(ckpt, "facebook/sam2.1-hiera-large")
+
     def test_sam2_inference_headless(self):
         try:
             from transformers import Sam2Model, Sam2Processor
         except ImportError:
             self.skipTest("Sam2Model not supported in this Python environment")
-        if not DEFAULT_SAM2_CHECKPOINT.is_dir():
+        
+        is_available = False
+        if isinstance(DEFAULT_SAM2_CHECKPOINT, Path) and DEFAULT_SAM2_CHECKPOINT.is_dir():
+            is_available = True
+        elif isinstance(DEFAULT_SAM2_CHECKPOINT, str):
+            is_available = True
+
+        if not is_available:
             self.skipTest("SAM2 checkpoint not available locally")
         dummy_img = np.zeros((100, 100, 3), dtype=np.uint8)
         dummy_img[20:80, 20:80] = 255

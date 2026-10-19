@@ -15,16 +15,54 @@ import json
 import os
 from pathlib import Path
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, Union
 
 import cv2
 import numpy as np
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parent
-DEFAULT_SAM2_CHECKPOINT = Path(
-    "C:/Users/yido2/.cache/huggingface/hub/models--facebook--sam2.1-hiera-large/snapshots/665f8e2ad61cf5f53d65644ff27c8ee525124610"
-)
+
+
+def resolve_sam2_checkpoint() -> Union[Path, str]:
+    """Resolve SAM2 checkpoint path or identifier across different machines and OSs.
+
+    Priority order:
+    1. Environment variable (ALPHAGEN_SAM2_PATH or SAM2_CHECKPOINT)
+    2. Local workspace relative directory (ROOT / 'models' / 'sam2.1-hiera-large', etc.)
+    3. User home Hugging Face hub cache directory (~/.cache/huggingface/hub/...)
+    4. Hugging Face repository ID ('facebook/sam2.1-hiera-large')
+    """
+    env_path = os.environ.get("ALPHAGEN_SAM2_PATH") or os.environ.get("SAM2_CHECKPOINT")
+    if env_path:
+        p = Path(env_path)
+        if p.exists():
+            return p.resolve()
+        return env_path
+
+    # Check relative paths inside the repository
+    for cand in [
+        ROOT / "models" / "sam2.1-hiera-large",
+        ROOT / "models" / "facebook--sam2.1-hiera-large",
+        ROOT / "models" / "sam2",
+    ]:
+        if cand.exists():
+            return cand.resolve()
+
+    # Search user's Hugging Face cache automatically regardless of username or snapshot hash
+    hf_hub = Path(os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface")) / "hub"
+    snapshot_dir = hf_hub / "models--facebook--sam2.1-hiera-large" / "snapshots"
+    if snapshot_dir.is_dir():
+        snapshots = [s for s in snapshot_dir.iterdir() if s.is_dir()]
+        if snapshots:
+            snapshots.sort(key=lambda s: s.stat().st_mtime, reverse=True)
+            return snapshots[0].resolve()
+
+    # Fallback to Hugging Face Model ID
+    return "facebook/sam2.1-hiera-large"
+
+
+DEFAULT_SAM2_CHECKPOINT: Union[Path, str] = resolve_sam2_checkpoint()
 
 # Supported Gemini models in order of priority
 GEMINI_MODELS = [
@@ -103,7 +141,7 @@ Return ONLY a raw JSON object (no markdown, no backticks, no extra text):
 def segment_with_sam2(
     image_bgr: np.ndarray,
     box_2d_1000: list[int],
-    checkpoint_path: Path = DEFAULT_SAM2_CHECKPOINT,
+    checkpoint_path: Union[Path, str] = DEFAULT_SAM2_CHECKPOINT,
 ) -> Tuple[np.ndarray, float]:
     """Segment target object using SAM2 given a 0-1000 normalized bounding box."""
     import torch
@@ -119,8 +157,13 @@ def segment_with_sam2(
     ]
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    processor = Sam2Processor.from_pretrained(str(checkpoint_path), local_files_only=True)
-    model = Sam2Model.from_pretrained(str(checkpoint_path), local_files_only=True).to(device).eval()
+    target_path = str(checkpoint_path) if isinstance(checkpoint_path, Path) else checkpoint_path
+    try:
+        processor = Sam2Processor.from_pretrained(target_path, local_files_only=True)
+        model = Sam2Model.from_pretrained(target_path, local_files_only=True).to(device).eval()
+    except Exception:
+        processor = Sam2Processor.from_pretrained(target_path)
+        model = Sam2Model.from_pretrained(target_path).to(device).eval()
 
     pil_img = Image.fromarray(cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB))
     inputs = processor(images=pil_img, input_boxes=[[box_xyxy]], return_tensors="pt").to(device)
@@ -164,7 +207,7 @@ def analyze_and_segment(
     image_path: str | Path,
     target_prompt: str,
     output_mask_path: Optional[str | Path] = None,
-    checkpoint_path: Path = DEFAULT_SAM2_CHECKPOINT,
+    checkpoint_path: Union[Path, str] = DEFAULT_SAM2_CHECKPOINT,
     expand_ratio: float = 1.2,
 ) -> Dict[str, Any]:
     """End-to-end: input image + text prompt -> VLM detection -> SAM2 mask generation -> ~1.2x auto expansion."""
@@ -226,11 +269,12 @@ def main():
     parser.add_argument("--image", required=True, type=Path, help="Reference frame image path")
     parser.add_argument("--prompt", required=True, type=str, help="Natural language object description")
     parser.add_argument("--output", type=Path, default=None, help="Output mask PNG path")
-    parser.add_argument("--sam2", type=Path, default=DEFAULT_SAM2_CHECKPOINT, help="SAM2 checkpoint path")
+    parser.add_argument("--sam2", type=str, default=str(DEFAULT_SAM2_CHECKPOINT), help="SAM2 checkpoint path or Hugging Face repo ID")
     parser.add_argument("--expand", type=float, default=1.2, help="Alpha expansion ratio (default: 1.2)")
     args = parser.parse_args()
 
-    result = analyze_and_segment(args.image, args.prompt, args.output, args.sam2, expand_ratio=args.expand)
+    sam2_target = Path(args.sam2) if Path(args.sam2).exists() else args.sam2
+    result = analyze_and_segment(args.image, args.prompt, args.output, sam2_target, expand_ratio=args.expand)
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
 
