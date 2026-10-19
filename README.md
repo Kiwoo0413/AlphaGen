@@ -1,4 +1,4 @@
-# AlphaGen (알파젠)
+# AlphaGen Gizmo
 
 **AlphaGen**은 비전-언어 모델(VLM) 기반의 객체 그라운딩, SAM2 고정밀 분할, LTX-2.5 비디오 디퓨전(IC-LoRA) 모델, 그리고 CompMatte 알고리즘 기반의 코어/엣지 분리 매트 정제를 통합한 차세대 제어형 알파 생성 시스템입니다.
 
