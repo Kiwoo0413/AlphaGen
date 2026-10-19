@@ -395,6 +395,7 @@ def main():
         pass
     request = read_json(args.request)
     started = time.monotonic()
+    vlm_mask_path = request.get("vlm_mask_path")
     try:
         cancelled(job)
         mode = request["mode"]
@@ -422,6 +423,7 @@ def main():
         elif mode == "refine":
             metadata = read_json(request["result"])
             output_dir = output_dir or metadata.get("output_dir")
+            vlm_mask_path = vlm_mask_path or metadata.get("vlm_mask_path")
         elif mode == "import":
             status(job, "importing", "Loading decoded LTX tensor")
             manifest = read_json(request["manifest"])
@@ -436,7 +438,6 @@ def main():
             mask_pattern = request.get("mask_pattern", "")
             target_dir = Path(output_dir) if output_dir else job
             target_dir.mkdir(parents=True, exist_ok=True)
-            vlm_mask_path = None
             if not mask_pattern or not Path(mask_pattern).is_file():
                 status(job, "analyzing", "Analyzing target with VLM & SAM2...")
                 from alphagen_vlm import analyze_and_segment
@@ -452,6 +453,9 @@ def main():
                 vlm_mask_path = mask_pattern
                 if "target_description" not in request:
                     request["target_description"] = vlm_res.get("target_description")
+            elif not vlm_mask_path and not request.get("has_manual_selection"):
+                if "%" not in mask_pattern and Path(mask_pattern).is_file():
+                    vlm_mask_path = mask_pattern
             status(job, "preparing", "Preparing RGB and selection mask")
             manifest = prepare_input(job, request)
             config = read_json(ROOT / "experiment_config.json")

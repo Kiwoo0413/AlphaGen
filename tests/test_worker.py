@@ -6,7 +6,7 @@ import unittest
 import cv2
 import numpy as np
 
-from alphagen_worker import ROOT, bake, export_raw, job_path, prepare_input, read_alpha, save_alpha
+from alphagen_worker import ROOT, bake, export_raw, job_path, main, prepare_input, read_alpha, save_alpha
 
 
 class WorkerTests(unittest.TestCase):
@@ -161,6 +161,31 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(gizmo["first"].value(), 1)
         self.assertEqual(gizmo["last"].value(), 240)
         self.assertGreater(gizmo["last"].value(), 121)
+
+    def test_main_refine_mode_preserves_vlm_mask_path(self):
+        import sys
+        alpha = np.stack([np.full((8, 12), 0.7, np.float32)])
+        meta = export_raw(self.job, alpha, 1001)
+        meta["vlm_mask_path"] = str(self.job / "vlm_initial_mask.png")
+        orig_res = self.job / "result.json"
+        orig_res.write_text(json.dumps(meta), encoding="utf-8")
+        req_file = self.job / "request.json"
+        req_file.write_text(json.dumps({
+            "mode": "refine",
+            "result": str(orig_res),
+            "output_dir": str(self.job)
+        }), encoding="utf-8")
+
+        orig_argv = sys.argv
+        sys.argv = ["alphagen_worker.py", str(req_file)]
+        try:
+            main()
+        finally:
+            sys.argv = orig_argv
+
+        res = json.loads(orig_res.read_text())
+        self.assertEqual(res.get("vlm_mask_path"), str(self.job / "vlm_initial_mask.png"))
+        self.assertIn("final_pattern", res)
 
 
 if __name__ == "__main__":

@@ -596,6 +596,8 @@ def generate(node):
     }
     if not mask_pattern and not has_manual_selection:
         request["reference_frame"] = ref_img.as_posix()
+    if not has_manual_selection and vlm_mask and Path(vlm_mask).is_file():
+        request["vlm_mask_path"] = vlm_mask
     _launch(node, job, request, job_mode="generate")
 
 
@@ -605,8 +607,12 @@ def refine_cached(node):
         raise ValueError("Import or generate and load an alpha first before refining")
     job = _new_job(node, "refine")
     alpha_dir = get_source_alpha_dir(node)
+    vlm_mask = node["vlm_mask_path"].value().strip() if "vlm_mask_path" in node.knobs() else ""
     update_progress_ui(node, 0.05, "Re-baking matte refinement on CPU...")
-    _launch(node, job, {"mode": "refine", "result": result_path, "output_dir": alpha_dir}, job_mode="refine")
+    req = {"mode": "refine", "result": result_path, "output_dir": alpha_dir}
+    if vlm_mask and Path(vlm_mask).is_file():
+        req["vlm_mask_path"] = vlm_mask
+    _launch(node, job, req, job_mode="refine")
 
 
 def load_result(node, path):
