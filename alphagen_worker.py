@@ -162,22 +162,86 @@ def cached_alpha(pt_path):
     return array.mean(axis=-1)
 
 
-def export_raw(job, alpha, first, content_size=None, output_size=None, output_dir=None):
+def build_roi_envelope(mask, dilate_ratio=0.15, feather_ratio=0.08):
+    """Create a soft spatial envelope (1.0 inside expanded target region, 0.0 outside)
+    to preserve fine hair/motion detail while suppressing unrelated background clutter.
+    """
+    binary = (mask > 0.01).astype(np.uint8)
+    pts = cv2.findNonZero(binary)
+    if pts is None:
+        return np.ones_like(mask, dtype=np.float32)
+    _, _, bw, bh = cv2.boundingRect(pts)
+    rx = max(2, round(bw * dilate_ratio))
+    ry = max(2, round(bh * dilate_ratio))
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * rx + 1, 2 * ry + 1))
+    dilated = cv2.dilate(binary.astype(np.float32), kernel)
+    sigma_x = max(1.5, bw * feather_ratio)
+    sigma_y = max(1.5, bh * feather_ratio)
+    envelope = cv2.GaussianBlur(dilated, (0, 0), sigmaX=sigma_x, sigmaY=sigma_y)
+    return np.clip(envelope * 1.5, 0.0, 1.0).astype(np.float32)
+
+
+def compute_crop_box(mask_union, pad_ratio=0.5):
+    """Compute padded ROI crop box [x1, y1, x2, y2] from a 2D foreground mask."""
+    h, w = mask_union.shape[:2]
+    binary = (mask_union > 0.01).astype(np.uint8)
+    pts = cv2.findNonZero(binary)
+    if pts is None:
+        return [0, 0, w, h]
+    bx, by, bw, bh = cv2.boundingRect(pts)
+    pad_x = max(1, round(bw * pad_ratio))
+    pad_y = max(1, round(bh * pad_ratio))
+    x1 = max(0, bx - pad_x)
+    y1 = max(0, by - pad_y)
+    x2 = min(w, bx + bw + pad_x)
+    y2 = min(h, by + bh + pad_y)
+    return [int(x1), int(y1), int(x2), int(y2)]
+
+
+def export_raw(job, alpha, first, content_size=None, output_size=None, output_dir=None, crop_box=None, mask_pattern=None):
     target = Path(output_dir) if output_dir else job
     directory = target / "raw"
     directory.mkdir(parents=True, exist_ok=True)
     job_directory = job / "raw"
     job_directory.mkdir(parents=True, exist_ok=True)
+    static_envelope = None
+    if mask_pattern and "%" not in mask_pattern and Path(mask_pattern).is_file():
+        static_mask = read_alpha(mask_pattern)
+        if crop_box:
+            cx1, cy1, cx2, cy2 = crop_box
+            static_mask = static_mask[cy1:cy2, cx1:cx2]
+        static_envelope = build_roi_envelope(static_mask)
+
     for index, image in enumerate(alpha):
         cancelled(job)
+        frame_num = first + index
         if content_size:
             w, h = content_size
             image = image[:h, :w]
-        if output_size and (image.shape[1], image.shape[0]) != tuple(output_size):
+        if crop_box and output_size:
+            cx1, cy1, cx2, cy2 = crop_box
+            cw, ch = cx2 - cx1, cy2 - cy1
+            out_w, out_h = output_size
+            if (image.shape[1], image.shape[0]) != (cw, ch):
+                patch = cv2.resize(image, (cw, ch), interpolation=cv2.INTER_LINEAR)
+            else:
+                patch = image
+            if static_envelope is not None and static_envelope.shape == (ch, cw):
+                patch = patch * static_envelope
+            elif mask_pattern and "%" in mask_pattern and Path(mask_pattern % frame_num).is_file():
+                f_mask = read_alpha(mask_pattern % frame_num)[cy1:cy2, cx1:cx2]
+                patch = patch * build_roi_envelope(f_mask)
+            if [cx1, cy1, cx2, cy2] == [0, 0, out_w, out_h]:
+                image = patch
+            else:
+                canvas = np.zeros((out_h, out_w), dtype=np.float32)
+                canvas[cy1:cy2, cx1:cx2] = patch
+                image = canvas
+        elif output_size and (image.shape[1], image.shape[0]) != tuple(output_size):
             image = cv2.resize(image, tuple(output_size), interpolation=cv2.INTER_LINEAR)
-        save_alpha(directory / f"alpha.{first + index:06d}.png", image)
+        save_alpha(directory / f"alpha.{frame_num:06d}.png", image)
         if target != job:
-            save_alpha(job_directory / f"alpha.{first + index:06d}.png", image)
+            save_alpha(job_directory / f"alpha.{frame_num:06d}.png", image)
     return {"raw_pattern": (directory / "alpha.%06d.png").as_posix(),
             "first": first, "last": first + len(alpha) - 1,
             "size": [image.shape[1], image.shape[0]], "precision": "16-bit PNG, linear alpha"}
@@ -328,8 +392,30 @@ def prepare_input(job, request):
     if first_image is None:
         raise ValueError("Cannot decode exported source")
     h, w = first_image.shape[:2]
-    scale = min(1, side / max(w, h))
-    rw, rh = max(1, round(w * scale)), max(1, round(h * scale))
+
+    pattern = request["mask_pattern"]
+    if "%" in pattern:
+        mask_union = np.zeros((h, w), dtype=np.float32)
+        for frame in range(first, last + 1):
+            m = read_alpha(pattern % frame)
+            if m.shape != (h, w):
+                raise ValueError("Selection mask must match source format")
+            if frame == first and not (m.max() > 0.01 and m.min() < 0.99):
+                raise ValueError("Selection mask is empty or covers the entire frame")
+            mask_union = np.maximum(mask_union, m)
+    else:
+        mask_union = read_alpha(pattern)
+        if mask_union.shape != (h, w):
+            raise ValueError("Selection mask must match source format")
+        if not (mask_union.max() > 0.01 and mask_union.min() < 0.99):
+            raise ValueError("Selection mask is empty or covers the entire frame")
+
+    crop_box = compute_crop_box(mask_union, pad_ratio=0.5)
+    cx1, cy1, cx2, cy2 = crop_box
+    cw, ch = cx2 - cx1, cy2 - cy1
+
+    scale = min(1, side / max(cw, ch))
+    rw, rh = max(1, round(cw * scale)), max(1, round(ch * scale))
     pw, ph = math.ceil(rw / 32) * 32, math.ceil(rh / 32) * 32
     paths = [job / "input.avi", job / "attention_mask.avi"]
     writers = [cv2.VideoWriter(str(p), cv2.VideoWriter_fourcc(*"FFV1"), fps, (pw, ph)) for p in paths]
@@ -345,17 +431,14 @@ def prepare_input(job, request):
             image = cv2.imread(source_pattern % frame, cv2.IMREAD_COLOR)
             if image is None or image.shape[:2] != (h, w):
                 raise ValueError(f"Source dimensions mismatch at {frame}")
-            pattern = request["mask_pattern"]
-            mask = read_alpha(pattern % frame if "%" in pattern else pattern)
-            if mask.shape != (h, w):
-                raise ValueError("Selection mask must match source format")
-            if frame == first and not (mask.max() > 0.01 and mask.min() < 0.99):
-                raise ValueError("Selection mask is empty or covers the entire frame")
+            mask = read_alpha(pattern % frame) if "%" in pattern else mask_union
+            cropped_image = image[cy1:cy2, cx1:cx2]
+            cropped_mask = mask[cy1:cy2, cx1:cx2]
             canvas = np.zeros((ph, pw, 3), np.uint8)
-            canvas[:rh, :rw] = cv2.resize(image, (rw, rh), interpolation=cv2.INTER_AREA)
+            canvas[:rh, :rw] = cv2.resize(cropped_image, (rw, rh), interpolation=cv2.INTER_AREA)
             writers[0].write(canvas)
             mask_canvas = np.zeros((ph, pw), np.uint8)
-            mask_canvas[:rh, :rw] = np.round(cv2.resize(mask, (rw, rh), interpolation=cv2.INTER_LINEAR) * 255).astype(np.uint8)
+            mask_canvas[:rh, :rw] = np.round(cv2.resize(cropped_mask, (rw, rh), interpolation=cv2.INTER_LINEAR) * 255).astype(np.uint8)
             writers[1].write(cv2.cvtColor(mask_canvas, cv2.COLOR_GRAY2BGR))
             last_image_canvas = canvas
             last_mask_canvas = mask_canvas
@@ -378,6 +461,7 @@ def prepare_input(job, request):
             raise RuntimeError("Prepared video frame count mismatch")
     manifest = {"prepared_video": paths[0].as_posix(), "prepared_size": [pw, ph],
                 "resized_content_size": [rw, rh], "source_size": [w, h],
+                "crop_box": crop_box,
                 "source_fps": fps, "frames": padded_count, "requested_frames": raw_count,
                 "seed": int(request.get("seed", 1234))}
     write_json(job / "manifest.json", manifest)
@@ -438,7 +522,7 @@ def main():
             mask_pattern = request.get("mask_pattern", "")
             target_dir = Path(output_dir) if output_dir else job
             target_dir.mkdir(parents=True, exist_ok=True)
-            if not mask_pattern or not Path(mask_pattern).is_file():
+            if not mask_pattern or ("%" not in mask_pattern and not Path(mask_pattern).is_file()):
                 status(job, "analyzing", "Analyzing target with VLM & SAM2...")
                 from alphagen_vlm import analyze_and_segment
                 ref_frame = request.get("reference_frame")
@@ -456,19 +540,18 @@ def main():
             elif not vlm_mask_path and not request.get("has_manual_selection"):
                 if "%" not in mask_pattern and Path(mask_pattern).is_file():
                     vlm_mask_path = mask_pattern
-            status(job, "preparing", "Preparing RGB and selection mask")
+            status(job, "preparing", "Preparing ROI-cropped RGB and selection mask")
             manifest = prepare_input(job, request)
             config = read_json(ROOT / "experiment_config.json")
-            config.update(manifest=(job / "manifest.json").as_posix(),
-                          conditioning_attention_mask={"path": (job / "attention_mask.avi").as_posix(), "strength": 1.0})
-            if request.get("prompt") or request.get("target_description"):
-                desc = request.get("target_description") or request.get("prompt")
-                config["prompt"] = (
-                    f"Generate a grayscale alpha matte only for {desc}. "
-                    "Maintain the same subject's identity throughout the clip. "
-                    "Preserve fine hair detail and soft edges. Exclude other subjects and the background. "
-                    "White represents the selected subject, black represents excluded regions, and gray represents partial opacity."
-                )
+            config.update(
+                manifest=(job / "manifest.json").as_posix(),
+                conditioning_attention_mask={"path": (job / "attention_mask.avi").as_posix(), "strength": 1.0},
+                prompt=(
+                    "Generate a grayscale alpha matte for the foreground of the input video. "
+                    "Preserve hair detail and soft edges. Exclude the background. "
+                    "White represents the foreground, black represents the background, and gray represents partial opacity."
+                ),
+            )
             write_json(job / "config.json", config)
             with gpu_lock():
                 run_inference(job, config)
@@ -479,9 +562,19 @@ def main():
             req_frames = manifest.get("requested_frames", manifest["frames"])
             if len(alpha) > req_frames:
                 alpha = alpha[:req_frames]
-            metadata = export_raw(job, alpha, request["first"], manifest["resized_content_size"], manifest["source_size"], output_dir=output_dir)
+            metadata = export_raw(
+                job,
+                alpha,
+                request["first"],
+                manifest["resized_content_size"],
+                manifest["source_size"],
+                output_dir=output_dir,
+                crop_box=manifest.get("crop_box"),
+                mask_pattern=mask_pattern,
+            )
             metadata.update(source_manifest=(job / "manifest.json").as_posix(),
-                            resolution_note="LTX working resolution upscaled to source; no new detail recovered")
+                            crop_box=manifest.get("crop_box"),
+                            resolution_note="LTX ROI-cropped resolution stitched back to native source frame")
         else:
             raise ValueError("Unknown job mode")
         bake(job, metadata, request.get("settings", {}), output_dir=output_dir)

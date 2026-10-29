@@ -187,6 +187,47 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(res.get("vlm_mask_path"), str(self.job / "vlm_initial_mask.png"))
         self.assertIn("final_pattern", res)
 
+    def test_roi_crop_and_stitch_small_target(self):
+        # Small target in bottom-right of a 200x400 frame
+        source = np.full((200, 400, 3), 100, np.uint8)
+        cv2.imwrite(str(self.job / "source.000136.png"), source)
+        mask = np.zeros((200, 400), np.float32)
+        mask[140:180, 260:320] = 1.0
+        mask_path = self.job / "vlm_initial_mask.png"
+        save_alpha(mask_path, mask)
+
+        request = {
+            "first": 136,
+            "last": 136,
+            "fps": 24,
+            "max_side": 128,
+            "source_pattern": str(self.job / "source.%06d.png"),
+            "mask_pattern": str(mask_path),
+        }
+        manifest = prepare_input(self.job, request)
+        # Crop box around [260..320, 140..180] with 50% padding -> [230, 120, 350, 200] (120x80)
+        self.assertEqual(manifest["crop_box"], [230, 120, 350, 200])
+        self.assertEqual(manifest["source_size"], [400, 200])
+
+        # Simulate LTX returning a full-white alpha inside the prepared canvas
+        pw, ph = manifest["prepared_size"]
+        fake_ltx_alpha = np.ones((1, ph, pw), dtype=np.float32)
+        meta = export_raw(
+            self.job,
+            fake_ltx_alpha,
+            136,
+            manifest["resized_content_size"],
+            manifest["source_size"],
+            crop_box=manifest["crop_box"],
+            mask_pattern=str(mask_path),
+        )
+        stitched = read_alpha(meta["raw_pattern"] % 136)
+        self.assertEqual(stitched.shape, (200, 400))
+        # Target center [160, 290] must be 1.0
+        self.assertGreater(float(stitched[160, 290]), 0.99)
+        # Far background [50, 50] must be strictly 0.0
+        self.assertEqual(float(stitched[50, 50]), 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()
