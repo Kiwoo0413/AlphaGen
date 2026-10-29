@@ -228,6 +228,78 @@ class WorkerTests(unittest.TestCase):
         # Far background [50, 50] must be strictly 0.0
         self.assertEqual(float(stitched[50, 50]), 0.0)
 
+    def test_per_node_alpha_folder_isolation(self):
+        from alphagen_nuke import _is_path_for_node, get_source_alpha_dir, restore_saved
+
+        class MockKnob:
+            def __init__(self, val=""):
+                self.val = val
+            def setValue(self, v):
+                self.val = v
+            def value(self):
+                return self.val
+
+        class MockRead:
+            def __init__(self, path):
+                self._knobs = {"file": MockKnob(path)}
+            def knobs(self):
+                return self._knobs
+            def __getitem__(self, k):
+                return self._knobs[k]
+            def inputs(self):
+                return 0
+
+        class MockAlphaGenNode:
+            def __init__(self, name, src):
+                self._name = name
+                self._src = src
+                self._knobs = {
+                    "result_path": MockKnob(""),
+                    "vlm_mask_path": MockKnob(""),
+                    "job_path": MockKnob(""),
+                    "has_result": MockKnob(False),
+                    "has_vlm_mask": MockKnob(False),
+                }
+                self._readers = {r: MockRead("old") for r in ("Read_raw", "Read_final", "Read_core", "Read_edge", "Read_selection")}
+            def fullName(self):
+                return self._name
+            def name(self):
+                return self._name
+            def input(self, i):
+                return self._src if i == 0 else None
+            def knobs(self):
+                return self._knobs
+            def __getitem__(self, k):
+                return self._knobs[k]
+            def node(self, r):
+                return self._readers.get(r)
+
+        plate_file = (self.job / "plates" / "shot_010.mov").as_posix()
+        (self.job / "plates").mkdir(parents=True, exist_ok=True)
+        src_node = MockRead(plate_file)
+        node1 = MockAlphaGenNode("AlphaGen1", src_node)
+        node2 = MockAlphaGenNode("AlphaGen2", src_node)
+
+        dir1 = get_source_alpha_dir(node1)
+        dir2 = get_source_alpha_dir(node2)
+        self.assertTrue(dir1.endswith("/alpha/AlphaGen1"))
+        self.assertTrue(dir2.endswith("/alpha/AlphaGen2"))
+        self.assertNotEqual(dir1, dir2)
+
+        # Simulate node2 being duplicated from node1 with node1's paths
+        node2["result_path"].setValue(f"{dir1}/result.json")
+        node2["vlm_mask_path"].setValue(f"{dir1}/vlm_initial_mask.png")
+        node2["has_result"].setValue(True)
+        self.assertTrue(_is_path_for_node(f"{dir1}/result.json", node1))
+        self.assertFalse(_is_path_for_node(f"{dir1}/result.json", node2))
+        self.assertFalse(_is_path_for_node(f"{self.job.as_posix()}/plates/alpha/result.json", node1))
+
+        restore_saved(node2)
+        self.assertEqual(node2["result_path"].value(), "")
+        self.assertEqual(node2["vlm_mask_path"].value(), "")
+        self.assertFalse(node2["has_result"].value())
+        self.assertEqual(node2.node("Read_final")["file"].value(), "")
+
 
 if __name__ == "__main__":
     unittest.main()

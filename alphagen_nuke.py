@@ -99,10 +99,60 @@ def configure_graph(node):
             merge["bbox"].setValue("B")
 
 
+def _node_folder_name(node) -> str:
+    """Return a filesystem-safe folder name unique to this Nuke node."""
+    import re
+    raw_name = ""
+    for attr in ("fullName", "name"):
+        if hasattr(node, attr):
+            try:
+                val = getattr(node, attr)()
+                if val:
+                    raw_name = str(val)
+                    break
+            except Exception:
+                pass
+    safe = re.sub(r"[^A-Za-z0-9_\-]+", "_", raw_name).strip("_")
+    return safe or "AlphaGen"
+
+
+def _is_path_for_node(path_str: str, node) -> bool:
+    """Check whether a saved alpha/mask path belongs to this specific node."""
+    if not path_str or not isinstance(path_str, str):
+        return False
+    clean = path_str.replace("\\", "/").rstrip("/")
+    parts = [p for p in clean.split("/") if p]
+    dir_parts = parts[:-1]
+    if "alpha" not in dir_parts:
+        return True
+    idx = len(dir_parts) - 1 - dir_parts[::-1].index("alpha")
+    if idx + 1 >= len(dir_parts):
+        return False
+    return dir_parts[idx + 1] == _node_folder_name(node)
+
+
+def _reset_node_state(node):
+    """Clear cached paths and internal Read nodes when a node is duplicated or points to another node's folder."""
+    for knob_name in ("result_path", "vlm_mask_path", "job_path"):
+        if knob_name in node.knobs():
+            node[knob_name].setValue("")
+    for flag_name in ("has_result", "has_vlm_mask"):
+        if flag_name in node.knobs():
+            node[flag_name].setValue(False)
+    if hasattr(node, "node"):
+        for r_name in ("Read_raw", "Read_final", "Read_core", "Read_edge", "Read_selection"):
+            reader = node.node(r_name)
+            if reader and "file" in reader.knobs():
+                reader["file"].setValue("")
+
+
 def restore_saved(node):
-    """Restore cache paths on gizmo load or script reopen."""
+    """Restore cache paths on gizmo load or script reopen, isolating per-node folders."""
     if "result_path" in node.knobs():
         path = node["result_path"].value()
+        if path and not _is_path_for_node(path, node):
+            _reset_node_state(node)
+            return
         if path and Path(path).is_file():
             try:
                 load_result(node, path)
@@ -110,7 +160,14 @@ def restore_saved(node):
                 set_status(node, "Restore failed: " + str(exc))
     if "vlm_mask_path" in node.knobs():
         vlm_path = node["vlm_mask_path"].value()
-        if vlm_path and Path(vlm_path).is_file():
+        if vlm_path and not _is_path_for_node(vlm_path, node):
+            node["vlm_mask_path"].setValue("")
+            if "has_vlm_mask" in node.knobs():
+                node["has_vlm_mask"].setValue(False)
+            reader = node.node("Read_selection") if hasattr(node, "node") else None
+            if reader and "file" in reader.knobs():
+                reader["file"].setValue("")
+        elif vlm_path and Path(vlm_path).is_file():
             load_vlm_preview(node, vlm_path)
 
 
@@ -189,7 +246,7 @@ def get_source_file_path(upstream):
 
 
 def get_source_alpha_dir(node):
-    """Get or create the 'alpha' folder in the directory of the source video."""
+    """Get or create the node-specific 'alpha/<NodeName>' folder in the directory of the source video."""
     source_node = node.input(0)
     file_path = get_source_file_path(source_node)
     if not file_path:
@@ -198,7 +255,7 @@ def get_source_alpha_dir(node):
         clean = file_path.replace("\\", "/")
         source_dir = os.path.dirname(clean)
         if source_dir:
-            alpha_dir = Path(source_dir) / "alpha"
+            alpha_dir = Path(source_dir) / "alpha" / _node_folder_name(node)
             alpha_dir.mkdir(parents=True, exist_ok=True)
             return alpha_dir.as_posix()
     except Exception:
@@ -506,6 +563,11 @@ def analyze_vlm(node):
     if not prompt:
         raise ValueError("Enter a Target Prompt describing the subject to segment.")
 
+    if "result_path" in node.knobs():
+        res_p = node["result_path"].value().strip()
+        if res_p and not _is_path_for_node(res_p, node):
+            _reset_node_state(node)
+
     ref_frame = int(node["ag_ref_frame"].value()) if "ag_ref_frame" in node.knobs() else int(node["first"].value())
     mask_expand = float(node["ag_mask_expand"].value()) if "ag_mask_expand" in node.knobs() else 1.2
     alpha_dir = get_source_alpha_dir(node)
@@ -550,6 +612,11 @@ def generate(node):
     has_manual_selection = node.input(1) is not None
     prompt = node["ag_prompt"].value().strip() if "ag_prompt" in node.knobs() else ""
     vlm_mask = node["vlm_mask_path"].value().strip() if "vlm_mask_path" in node.knobs() else ""
+    if vlm_mask and not _is_path_for_node(vlm_mask, node):
+        vlm_mask = ""
+        node["vlm_mask_path"].setValue("")
+        if "has_vlm_mask" in node.knobs():
+            node["has_vlm_mask"].setValue(False)
     mask_expand = float(node["ag_mask_expand"].value()) if "ag_mask_expand" in node.knobs() else 1.2
     alpha_dir = get_source_alpha_dir(node)
 
@@ -608,6 +675,8 @@ def refine_cached(node):
     job = _new_job(node, "refine")
     alpha_dir = get_source_alpha_dir(node)
     vlm_mask = node["vlm_mask_path"].value().strip() if "vlm_mask_path" in node.knobs() else ""
+    if vlm_mask and not _is_path_for_node(vlm_mask, node):
+        vlm_mask = ""
     update_progress_ui(node, 0.05, "Re-baking matte refinement on CPU...")
     req = {"mode": "refine", "result": result_path, "output_dir": alpha_dir}
     if vlm_mask and Path(vlm_mask).is_file():

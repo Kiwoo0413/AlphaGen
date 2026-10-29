@@ -252,7 +252,8 @@ def bake(job, metadata, settings, output_dir=None):
     s.validate()
     target = Path(output_dir) if output_dir else job
     target.mkdir(parents=True, exist_ok=True)
-    # 1. Permanent production subdirectories in target: ONLY final/ (raw/ was saved by export_raw)
+    # 1. Permanent production subdirectories in target: raw/ and final/
+    (target / "raw").mkdir(parents=True, exist_ok=True)
     (target / "final").mkdir(parents=True, exist_ok=True)
     if target != job:
         (job / "final").mkdir(parents=True, exist_ok=True)
@@ -269,6 +270,9 @@ def bake(job, metadata, settings, output_dir=None):
             prog = 0.85 + 0.14 * (frame - metadata["first"]) / total_frames
             status(job, "refining", f"Refining frame {frame}/{metadata['last']}", progress=prog)
         raw = read_alpha(metadata["raw_pattern"] % frame)
+        raw_target_file = target / "raw" / f"alpha.{frame:06d}.png"
+        if not raw_target_file.is_file():
+            save_alpha(raw_target_file, raw)
         output = refine(raw, s)
         # 1. Save final alpha directly to target / final / alpha.XXXXXX.png
         save_alpha(target / "final" / f"alpha.{frame:06d}.png", output["final"])
@@ -283,6 +287,7 @@ def bake(job, metadata, settings, output_dir=None):
                         "raw_background_below_clip_mean": float(raw[raw <= s.black_clip].mean()) if (raw <= s.black_clip).any() else None,
                         "final_background_below_clip_mean": float(output["final"][raw <= s.black_clip].mean()) if (raw <= s.black_clip).any() else None})
     result = dict(metadata)
+    result["raw_pattern"] = (target / "raw" / "alpha.%06d.png").as_posix()
     result["final_pattern"] = (target / "final" / "alpha.%06d.png").as_posix()
     result["core_pattern"] = (job / "core" / "alpha.%06d.png").as_posix()
     result["edge_pattern"] = (job / "edge" / "alpha.%06d.png").as_posix()
