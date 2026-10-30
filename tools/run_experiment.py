@@ -54,24 +54,29 @@ def absolute(path):
     return p if p.is_absolute() else ROOT / p
 
 
+DEFAULT_ALPHA_PROMPT = (
+    "Generate a grayscale alpha matte for the foreground of the input video. "
+    "Preserve hair detail and soft edges. Exclude the background. "
+    "White represents the foreground, black represents the background, and gray represents partial opacity."
+)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=ROOT / "experiment_config.json")
-    parser.add_argument("--case", choices=["baseline", "selected", "target_a", "target_b", "generic_alpha"], default="baseline")
+    parser.add_argument("--case", choices=["baseline", "selected", "target_a", "target_b", "generic_alpha"], default="generic_alpha")
     parser.add_argument("--run", action="store_true", help="Actually launch inference; default only saves a plan")
     parser.add_argument("--retry-failed", action="store_true", help="Archive a failed attempt before retrying")
     args = parser.parse_args()
     config = read(args.config)
     manifest = read(absolute(config["manifest"]))
-    selection = read(absolute(config["selection"]))
-    case = selection["selected_id"] if args.case == "selected" else args.case
-    candidates = {x["id"]: x for x in selection["candidates"]}
+    case = args.case
     if config.get("prompt"):
         prompt = config["prompt"]
     elif case == "generic_alpha":
-        prompt = read(ROOT / "experiments/001/followup_conditions.json")["generic_alpha"]["prompt"]
+        prompt = DEFAULT_ALPHA_PROMPT
     else:
-        prompt = "" if case == "baseline" else candidates[case]["prompt"]
+        prompt = ""
     if case != "baseline" and not prompt.strip():
         parser.error("Target prompt must not be empty")
     width, height = manifest["prepared_size"]

@@ -1,8 +1,6 @@
 {
   "python": "auto",
   "pipeline_script": "tools/ic_lora_video_only.py",
-  "manifest": "experiments/001/manifest.json",
-  "selection": "experiments/001/selection.json",
   "models": {
     "transformer-path": "LTX-2.5/diffusion_models/ltx-2.5-22b-distilled-transformer-bf16.safetensors",
     "video-vae-path": "LTX-2.5/vae/ltx-2.5-video-vae-bf16.safetensors",

@@ -42,8 +42,5 @@ expected = {
 }
 for name, inputs in expected.items():
     assert nodes[name]["inputs"] == inputs, (name, nodes[name])
-report = {"tcl_parse": "passed", "expected_connections": "passed", "nodes": nodes,
-          "limitation": "Does not verify Nuke knob availability, pixels, licenses, or UI"}
-(ROOT / "nuke_tests").mkdir(exist_ok=True)
-(ROOT / "nuke_tests/gizmo_structure.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
 print("Gizmo Tcl syntax and 8 critical node connections passed (not a Nuke render test)")
+

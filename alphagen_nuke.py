@@ -885,25 +885,3 @@ def register():
     if not menu.findItem("AlphaGen"):
         menu.addCommand("AlphaGen", "import alphagen_nuke; alphagen_nuke.create()")
 
-
-def demo():
-    """Create test graph without replacing an open script."""
-    nuke = _nuke()
-    result = ROOT / "experiments/demo_refine/result.json"
-    if not result.is_file():
-        result = ROOT / "jobs/demo_refine/result.json"
-    if not result.is_file():
-        raise ValueError("Demo fixture not found in experiments/demo_refine")
-    source = nuke.nodes.Read(file=(ROOT / "experiments/001/input.avi").as_posix())
-    source["first"].setValue(1)
-    source["last"].setValue(17)
-    source["colorspace"].setValue("sRGB")
-    selection = nuke.nodes.Read(file=(ROOT / "experiments/002/initial_mask.png").as_posix())
-    selection["raw"].setValue(True)
-    expression = nuke.nodes.Expression(inputs=[selection], expr3="r")
-    node = create()
-    node.setInput(0, source)
-    node.setInput(1, expression)
-    load_result(node, result)
-    node["view_mode"].setValue("Final alpha")
-    return node

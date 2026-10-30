@@ -513,16 +513,6 @@ def main():
             metadata = read_json(request["result"])
             output_dir = output_dir or metadata.get("output_dir")
             vlm_mask_path = vlm_mask_path or metadata.get("vlm_mask_path")
-        elif mode == "import":
-            status(job, "importing", "Loading decoded LTX tensor")
-            manifest = read_json(request["manifest"])
-            alpha = cached_alpha(request["decoded_cache"])
-            if len(alpha) != manifest["frames"]:
-                raise ValueError("Cache and manifest frame counts differ")
-            # Imported experiment uses prepared resolution, with right/bottom padding removed.
-            metadata = export_raw(job, alpha, request.get("first", 1), manifest["resized_content_size"], output_dir=output_dir)
-            metadata.update(source_manifest=request["manifest"], source_cache=request["decoded_cache"],
-                            resolution_note="Prepared experiment resolution; not native source detail")
         elif mode == "generate":
             mask_pattern = request.get("mask_pattern", "")
             target_dir = Path(output_dir) if output_dir else job
