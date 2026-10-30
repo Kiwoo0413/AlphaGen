@@ -229,7 +229,7 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(float(stitched[50, 50]), 0.0)
 
     def test_per_node_alpha_folder_isolation(self):
-        from alphagen_nuke import _is_path_for_node, get_source_alpha_dir, restore_saved
+        from alphagen_nuke import _is_path_for_node, get_source_alpha_dir, resolve_alpha_folder, restore_saved
 
         class MockKnob:
             def __init__(self, val=""):
@@ -260,7 +260,7 @@ class WorkerTests(unittest.TestCase):
                     "has_result": MockKnob(False),
                     "has_vlm_mask": MockKnob(False),
                 }
-                self._readers = {r: MockRead("old") for r in ("Read_raw", "Read_final", "Read_core", "Read_edge", "Read_selection")}
+                self._readers = {r: MockRead("") for r in ("Read_raw", "Read_final", "Read_core", "Read_edge", "Read_selection")}
             def fullName(self):
                 return self._name
             def name(self):
@@ -299,6 +299,10 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(node2["vlm_mask_path"].value(), "")
         self.assertFalse(node2["has_result"].value())
         self.assertEqual(node2.node("Read_final")["file"].value(), "")
+
+        # Verify resolve_alpha_folder returns each node's dedicated folder
+        self.assertEqual(resolve_alpha_folder(node1), Path(dir1).resolve())
+        self.assertEqual(resolve_alpha_folder(node2), Path(dir2).resolve())
 
 
 if __name__ == "__main__":

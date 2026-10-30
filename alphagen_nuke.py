@@ -86,11 +86,24 @@ def create(show_panel=True):
 
 def configure_graph(node):
     """Apply fixes and configure internal gizmo nodes."""
-    node["onCreate"].setValue("import alphagen_nuke; alphagen_nuke.restore_saved(nuke.thisNode())")
-    if "cancel" in node.knobs():
+    if "onCreate" in node.knobs():
+        node["onCreate"].setValue("import alphagen_nuke; alphagen_nuke.restore_saved(nuke.thisNode())")
+    if "cancel" in node.knobs() and hasattr(node["cancel"], "setLabel"):
         node["cancel"].setLabel("<b><font color='#FF5252'>⏹ Stop Queue (중단)</font></b>")
+    if "open_folder" not in node.knobs() and hasattr(node, "addKnob"):
+        try:
+            nuke = _nuke()
+            btn = nuke.PyScript_Knob(
+                "open_folder",
+                "<b><font color='#64B5F6'>📂 Open Alpha Folder</font></b>",
+                "import alphagen_nuke; alphagen_nuke.action(nuke.thisNode(), 'open_folder')",
+            )
+            btn.clearFlag(nuke.STARTLINE)
+            node.addKnob(btn)
+        except Exception:
+            pass
     for name in ("AddCore", "RemoveGarbage"):
-        merge = node.node(name)
+        merge = node.node(name) if hasattr(node, "node") else None
         if merge:
             merge["Achannels"].setValue("rgba")
             merge["Bchannels"].setValue("rgba")
@@ -790,6 +803,64 @@ def cancel(node):
     set_status(node, "Queue cancelled by user. Ready for next task.")
 
 
+def resolve_alpha_folder(node) -> Path:
+    """Resolve the active alpha output directory currently referenced by this node."""
+    # 1. Check result_path knob
+    if "result_path" in node.knobs():
+        res_val = node["result_path"].value().strip()
+        if res_val and _is_path_for_node(res_val, node):
+            res_p = Path(res_val)
+            if res_p.is_file() or res_p.parent.is_dir():
+                return res_p.parent.resolve()
+
+    # 2. Check internal Read_final / Read_raw / Read_selection node file knob
+    if hasattr(node, "node"):
+        for r_name in ("Read_final", "Read_raw", "Read_selection"):
+            reader = node.node(r_name)
+            if reader and "file" in reader.knobs():
+                f_val = reader["file"].value().strip()
+                if f_val and _is_path_for_node(f_val, node):
+                    f_dir = Path(f_val).parent
+                    if f_dir.name in ("final", "raw", "core", "edge") and f_dir.parent.is_dir():
+                        return f_dir.parent.resolve()
+                    if f_dir.is_dir():
+                        return f_dir.resolve()
+
+    # 3. Check vlm_mask_path knob
+    if "vlm_mask_path" in node.knobs():
+        vlm_val = node["vlm_mask_path"].value().strip()
+        if vlm_val and _is_path_for_node(vlm_val, node):
+            vlm_p = Path(vlm_val)
+            if vlm_p.parent.is_dir():
+                return vlm_p.parent.resolve()
+
+    # 4. Compute from connected Source input
+    alpha_dir = get_source_alpha_dir(node)
+    if alpha_dir and Path(alpha_dir).is_dir():
+        return Path(alpha_dir).resolve()
+
+    # 5. Fallback to job_path if available
+    if "job_path" in node.knobs():
+        job_val = node["job_path"].value().strip()
+        if job_val and Path(job_val).is_dir():
+            return Path(job_val).resolve()
+
+    raise ValueError("No generated alpha folder found for this node. Connect a Source Read node or generate an alpha first.")
+
+
+def open_alpha_folder(node):
+    """Open the currently referenced alpha directory in the system file explorer."""
+    folder = resolve_alpha_folder(node)
+    if os.name == "nt":
+        os.startfile(str(folder))
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", str(folder)])
+    else:
+        subprocess.Popen(["xdg-open", str(folder)])
+    set_status(node, f"Opened folder: {folder.as_posix()}")
+    return folder
+
+
 def action(node, name):
     try:
         {
@@ -798,6 +869,7 @@ def action(node, name):
             "refine": refine_cached,
             "cancel": cancel,
             "stop": cancel,
+            "open_folder": open_alpha_folder,
         }[name](node)
     except Exception as exc:
         set_status(node, "Error: " + str(exc))

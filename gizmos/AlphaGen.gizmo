@@ -75,6 +75,7 @@ Gizmo {
  addUserKnob {26 "" +STARTLINE}
  addUserKnob {26 sec_4 l "" T "<b><font size='3' color='#90CAF9'>4. OUTPUT & VIEW MODE</font></b>"}
  addUserKnob {4 view_mode l View M {"Final alpha" "Raw LTX alpha" "Target Selection (VLM)" "Core" "Edge" "Source with alpha" "Premultiplied RGBA"}}
+ addUserKnob {22 open_folder l "<b><font color='#64B5F6'>📂 Open Alpha Folder</font></b>" T "import alphagen_nuke; alphagen_nuke.action(nuke.thisNode(), 'open_folder')" -STARTLINE}
 
  addUserKnob {1 vlm_mask_path l "" +INVISIBLE}
  addUserKnob {1 result_path l "" +INVISIBLE}
