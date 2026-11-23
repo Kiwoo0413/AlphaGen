@@ -27,18 +27,31 @@ Foundry Nuke 기즈모 환경에서 완벽하게 구동되며, 향후 웹 UI(Fas
 
 ## 🏗️ 시스템 아키텍처 (Pipeline Architecture)
 
-```mermaid
-flowchart TD
-    classDef default width:880px,min-height:52px,font-size:15px,text-align:center;
+<div align="center">
 
-    A["<center>🎬 <b>[INPUT]</b> 첫 프레임 시퀀스 플레이트 연동 + 사용자 지정 자연어 타겟 프롬프트 주입</center>"] --> B["<center>🔍 <b>[VLM Grounding]</b> Gemini Flash 기반 2D BBox 좌표 [ymin, xmin, ymax, xmax] 및 타겟 시맨틱 레이블 추출</center>"]
-    B --> C["<center>🎯 <b>[SAM 2.1 Segmentation]</b> Hiera-Large 엔진 기반 1.2배 외곽 자동 확장 픽셀 단위 정밀 타겟 마스크 생성</center>"]
-    C --> D["<center>👁️ <b>[Nuke Pre-verification]</b> 'Target Selection (VLM)' 뷰 모드를 통해 1~2초 내 분할 마스크 즉시 시각 확인</center>"]
-    D --> E["<center>📐 <b>[ROI Crop & Stitch]</b> 타겟 BBox 50% 여유 패딩 크롭 + 캔버스 복원 스티칭 및 표준 알파 프롬프트 주입</center>"]
-    E --> F["<center>🚀 <b>[LTX-2.5 Video Diffusion]</b> 49프레임 시계열 청크 단위 디퓨전 생성 및 17프레임 코사인 오버랩 블렌딩</center>"]
-    F --> G["<center>⚡ <b>[CompMatte Refinement]</b> 순수 CPU 가속 Density Curve 보정 + Core Solidification + Edge 디테일 복원</center>"]
-    G --> H["<center>✨ <b>[Final Composite]</b> Nuke 내부 뷰어 자동 연결 및 16-bit 무손실 최종 완성 알파(RGBA) 시퀀스 출력</center>"]
+```mermaid
+---
+config:
+  markdownAutoWrap: false
+  flowchart:
+    wrappingWidth: 2000
+    padding: 16
+    rankSpacing: 28
+---
+flowchart TD
+    A["`🎬 **INPUT** — 첫 프레임 영상 시퀀스 + 사용자 자연어 타겟 프롬프트 입력`"]
+    B["`🔍 **VLM Grounding** — Gemini Flash 기반 2D BBox 좌표 및 타겟 설명 추출`"]
+    C["`🎯 **SAM 2.1 분할** — Hiera-Large 로컬 모델 1.2배 확장 초기 타겟 마스크`"]
+    D["`👁️ **Nuke 사전 검증** — Target Selection 뷰에서 1~2초 내 마스크 즉시 확인`"]
+    E["`📐 **ROI Crop & Stitch** — 타겟 BBox 패딩 크롭 및 캔버스 복원 스티칭`"]
+    F["`🚀 **LTX-2.5 디퓨전** — 49프레임 청크 & 17프레임 코사인 오버랩 생성`"]
+    G["`⚡ **CompMatte 정제** — CPU Density Curve · Core · Edge 디테일 복원`"]
+    H["`✨ **최종 출력** — Nuke 뷰어 자동 연결 및 16-bit 무손실 알파 · RGBA`"]
+
+    A --> B --> C --> D --> E --> F --> G --> H
 ```
+
+</div>
 
 ---
 
@@ -273,18 +286,31 @@ Designed for production environments, AlphaGen runs natively as a Foundry Nuke G
 
 ## 🏗️ Pipeline Architecture
 
-```mermaid
-flowchart TD
-    classDef default width:880px,min-height:52px,font-size:15px,text-align:center;
+<div align="center">
 
-    A["<center>🎬 <b>[INPUT]</b> Initial Frame Plate Sequence + Natural Language User Target Prompt Injection</center>"] --> B["<center>🔍 <b>[VLM Grounding]</b> Gemini Flash 2D BBox Coordinates [ymin, xmin, ymax, xmax] & Semantic Target Label Extraction</center>"]
-    B --> C["<center>🎯 <b>[SAM 2.1 Segmentation]</b> Local Hiera-Large Engine 1.2x Auto-expanded Pixel-level Initial Target Mask Generation</center>"]
-    C --> D["<center>👁️ <b>[Nuke Pre-verification]</b> Instant Visual Mask Inspection in 'Target Selection (VLM)' View within 1–2 Seconds</center>"]
-    D --> E["<center>📐 <b>[ROI Crop & Stitch]</b> Target BBox 50% Padded Crop + Canvas Re-stitching & Standard Alpha Matting Conditioning</center>"]
-    E --> F["<center>🚀 <b>[LTX-2.5 Diffusion]</b> 49-frame Temporal Chunk Inference with 17-frame Equal-Power Cosine Overlap Blending</center>"]
-    F --> G["<center>⚡ <b>[CompMatte Refinement]</b> Pure CPU Accelerated Density Curve + Core Solidification + Edge Detail Restoration</center>"]
-    G --> H["<center>✨ <b>[Final Composite]</b> Automatic Nuke Internal Viewer Connection & 16-bit Lossless Master Alpha (RGBA) Output</center>"]
+```mermaid
+---
+config:
+  markdownAutoWrap: false
+  flowchart:
+    wrappingWidth: 2000
+    padding: 16
+    rankSpacing: 28
+---
+flowchart TD
+    A["`🎬 **INPUT** — First Frame Plate Sequence + Natural Language Target Prompt`"]
+    B["`🔍 **VLM Grounding** — Gemini Flash 2D BBox & Semantic Target Description`"]
+    C["`🎯 **SAM 2.1 Segmentation** — Local Hiera-Large 1.2x Expanded Target Mask`"]
+    D["`👁️ **Nuke Pre-verification** — Instant Check in Target Selection View (1–2s)`"]
+    E["`📐 **ROI Crop & Stitch** — Padded BBox Crop & Full-Canvas Mask Stitching`"]
+    F["`🚀 **LTX-2.5 IC-LoRA** — 49-Frame Chunks & 17-Frame Cosine Overlap Blending`"]
+    G["`⚡ **CompMatte CPU** — Density Curve · Core Solidification · Edge Restoration`"]
+    H["`✨ **Final Output** — Auto-Linked Nuke Viewer & 16-bit Lossless Alpha / RGBA`"]
+
+    A --> B --> C --> D --> E --> F --> G --> H
 ```
+
+</div>
 
 ---
 
