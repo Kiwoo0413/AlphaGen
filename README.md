@@ -1,5 +1,9 @@
 # AlphaGen Gizmo
 
+<p align="center">
+  <b>한국어</b> | <a href="README_EN.md">English</a>
+</p>
+
 **AlphaGen**은 비전-언어 모델(VLM) 기반의 객체 그라운딩, SAM2 고정밀 분할, LTX-2.5 비디오 디퓨전(IC-LoRA) 모델, 그리고 CompMatte 알고리즘 기반의 코어/엣지 분리 매트 정제를 통합한 차세대 제어형 알파 생성 시스템입니다.
 
 Foundry Nuke 기즈모 환경에서 완벽하게 구동되며, 향후 웹 UI(FastAPI/Gradio) 및 학술 연구(논문)로 확장 가능한 이원화(Dual-Runtime) 아키텍처로 설계되었습니다.
@@ -57,11 +61,6 @@ AlphaGen/
 │   ├── test_matte.py               # 코어/엣지 수학 및 형태학 알고리즘 검증
 │   ├── test_vlm.py                 # VLM 좌표 변환 및 SAM2 추론 검증
 │   └── test_worker.py              # 서브프로세스 IPC, 프로세스 트리 강제 종료 및 청크 생성 검증
-│
-└── experiments/                    # 벤치마크 및 데모 데이터 (작업 임시 캐시는 Nuke 캐시 디렉토리로 격리)
-    ├── 001/                        # 기본 알파 프롬프트 대조군 데이터
-    ├── 002/                        # 공간 어텐션 마스크 조건화 검증 데이터
-    └── demo_refine/                # 데모 실행용 캐시 데이터
 ```
 
 ---
@@ -88,6 +87,7 @@ AlphaGen/
    - **[⚡ Update Matte (CPU)]**: GPU 재실행 없이 CPU에서 밀리초 단위로 결과 즉시 갱신
 4. **Step 4. OUTPUT & VIEW MODE**:
    - 7개 뷰 모드 실시간 전환 (`Final Alpha`, `Raw LTX Alpha`, `Target Selection (VLM)`, `Core`, `Edge`, `Source with Alpha`, `Premultiplied RGBA`)
+   - **`[📂 Open Alpha Folder]`**: 현재 노드가 참조 중인 격리된 알파 폴더(`.../alpha/<노드이름>/`)를 시스템 파일 탐색기에서 즉시 열기
 
 ---
 
@@ -198,20 +198,21 @@ python -m unittest discover tests
 
 ## 📁 생성된 마스크 및 결과 파일 저장 위치 (File Storage)
 
-생성된 모든 알파 마스크는 아티스트가 Nuke 및 타 합성 툴에서 바로 연결하여 사용할 수 있도록, **원본 영상 파일이 위치한 디렉토리 하위에 `alpha/` 폴더를 자동 생성**하여 저장됩니다. 디렉토리 오염을 방지하고 작업 편의성을 극대화하기 위해 꼭 필요한 **`final/`과 `raw/` 2개 폴더 체계**로 정돈되어 출력됩니다:
+생성된 모든 알파 마스크는 아티스트가 Nuke 및 타 합성 툴에서 바로 연결하여 사용할 수 있도록, **원본 영상 파일이 위치한 디렉토리 하위에 `alpha/<노드이름>/` 폴더를 자동 생성**하여 저장됩니다. 동일한 Nuke 프로젝트 내에서 여러 AlphaGen 노드를 사용할 때 발생할 수 있는 파일 충돌 및 덮어쓰기를 방지하기 위해 노드 이름별로 격리되며, 디렉토리 오염을 방지하고 작업 편의성을 극대화하기 위해 꼭 필요한 **`final/`과 `raw/` 2개 폴더 체계**로 정돈되어 출력됩니다:
 
 ```text
 [원본 영상 위치]/
 ├── source_plate.%04d.exr           # 원본 영상 시퀀스 (또는 clip.mp4)
 │
-└── alpha/                          # ★ 원본과 동일한 위치에 자동 생성되는 알파 폴더
-    ├── final/
-    │   └── alpha.%06d.png          # ★ [최종 완성 알파] 16-bit 무손실 완성 알파 시퀀스 (Nuke Read_final 자동 로드)
-    ├── raw/
-    │   └── alpha.%06d.png          # LTX 신경망이 생성한 원시 알파 시퀀스 (Nuke Read_raw 자동 로드)
-    ├── vlm_initial_mask.png        # SAM2 1.2배 자동 확장 타겟 마스크 (사전 검증용)
-    ├── vlm_selection.json          # VLM 바운딩 박스 및 신뢰도 메타데이터
-    └── result.json                 # 최종 결과 명세서
+└── alpha/                          # 원본과 동일한 위치에 자동 생성되는 알파 폴더
+    └── <NodeName>/                 # ★ 노드 이름별 독립 격리 하위 폴더
+        ├── final/
+        │   └── alpha.%06d.png      # ★ [최종 완성 알파] 16-bit 무손실 완성 알파 시퀀스 (Nuke Read_final 자동 로드)
+        ├── raw/
+        │   └── alpha.%06d.png      # LTX 신경망이 생성한 원시 알파 시퀀스 (Nuke Read_raw 자동 로드)
+        ├── vlm_initial_mask.png    # SAM2 1.2배 자동 확장 타겟 마스크 (사전 검증용)
+        ├── vlm_selection.json      # VLM 바운딩 박스 및 신뢰도 메타데이터
+        └── result.json             # 최종 결과 명세서
 ```
 
 > [!NOTE]
