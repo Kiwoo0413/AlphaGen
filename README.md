@@ -29,13 +29,13 @@ Foundry Nuke 기즈모 환경에서 완벽하게 구동되며, 향후 웹 UI(Fas
 
 ```mermaid
 flowchart TD
-    A["🎬 입력: 첫 프레임 + 사용자 자연어 프롬프트"] --> B["🔍 VLM 객체 그라운딩 (Gemini Flash)<br/>2D BBox [ymin, xmin, ymax, xmax] 및 타겟 텍스트 설명"]
-    B --> C["🎯 로컬 SAM2.1 분할 (Hiera-Large)<br/>참조 프레임 1.2배 자동 확장 픽셀 단위 초기 타겟 마스크"]
-    C --> D["👁️ Nuke 뷰어 사전 검증<br/>Target Selection (VLM) 뷰에서 1~2초 내 즉시 확인"]
-    D --> E["📐 ROI Crop & Stitch 파이프라인<br/>BBox 영역 패딩 크롭 + 표준 알파 생성 프롬프트"]
-    E --> F["🚀 LTX-2.5 IC-LoRA 비디오 디퓨전<br/>49프레임 청크 & 17프레임 코사인 오버랩 블렌딩"]
-    F --> G["⚡ CompMatte CPU 매트 정제<br/>Density Curve + Core Solidification + Edge Restoration"]
-    G --> H["✨ 최종 합성용 알파 및 RGBA 출력"]
+    A["🎬 입력 : 첫 프레임 영상 + 사용자 자연어 프롬프트"] --> B["🔍 VLM 객체 그라운딩 (Gemini Flash) : 2D BBox 좌표 및 대상 텍스트 레이블 추출"]
+    B --> C["🎯 로컬 SAM 2.1 분할 (Hiera-Large) : 참조 프레임 1.2배 자동 확장 픽셀 단위 초기 타겟 마스크"]
+    C --> D["👁️ Nuke 뷰어 사전 검증 : 'Target Selection (VLM)' 뷰 모드에서 1~2초 내 즉시 확인"]
+    D --> E["📐 ROI Crop & Stitch : 타겟 BBox 여유 패딩 크롭 및 표준 알파 생성 조건화"]
+    E --> F["🚀 LTX-2.5 IC-LoRA 비디오 디퓨전 : 49프레임 청크 & 17프레임 코사인 오버랩 블렌딩"]
+    F --> G["⚡ CompMatte CPU 매트 정제 : Density Curve + Core Solidification + Edge Restoration"]
+    G --> H["✨ 최종 출력 : Nuke 내부 뷰어 자동 연결 및 16-bit 무손실 완성 알파 시퀀스 / RGBA 출력"]
 ```
 
 ---
@@ -273,13 +273,13 @@ Designed for production environments, AlphaGen runs natively as a Foundry Nuke G
 
 ```mermaid
 flowchart TD
-    A["🎬 Input: First Frame + Natural Language Prompt"] --> B["🔍 VLM Object Grounding (Gemini Flash)<br/>2D BBox [ymin, xmin, ymax, xmax] & Target Semantic Label"]
-    B --> C["🎯 Local SAM 2.1 Segmentation (Hiera-Large)<br/>1.2x Auto-expanded Pixel-level Initial Target Mask"]
-    C --> D["👁️ Nuke Viewer Pre-verification<br/>Instant preview in Target Selection (VLM) view in 1–2 sec"]
-    D --> E["📐 ROI Crop & Stitch Pipeline<br/>BBox target padded crop + Standard matting prompt"]
-    E --> F["🚀 LTX-2.5 IC-LoRA Video Diffusion<br/>49-frame chunks with 17-frame cosine overlap blending"]
-    F --> G["⚡ CompMatte CPU Matte Refinement<br/>Density Curve + Core Solidification + Edge Restoration"]
-    G --> H["✨ Final Alpha & RGBA Compositing Output"]
+    A["🎬 Input : Initial Frame + Natural Language Target Prompt"] --> B["🔍 VLM Object Grounding (Gemini Flash) : 2D BBox coordinates and target semantic label extraction"]
+    B --> C["🎯 Local SAM 2.1 (Hiera-Large) : 1.2x auto-expanded pixel-level initial target mask generation"]
+    C --> D["👁️ Nuke Viewer Pre-verification : Instant verification in 'Target Selection (VLM)' view within 1–2 sec"]
+    D --> E["📐 ROI Crop & Stitch Pipeline : Target BBox padded crop and standard matting conditioning"]
+    E --> F["🚀 LTX-2.5 IC-LoRA Video Diffusion : 49-frame temporal chunks with 17-frame cosine overlap blending"]
+    F --> G["⚡ CompMatte CPU Refinement : Density Curve + Core Solidification + Edge Restoration"]
+    G --> H["✨ Final Output : Automatic Nuke internal viewer connection and 16-bit lossless alpha / RGBA sequence"]
 ```
 
 ---
