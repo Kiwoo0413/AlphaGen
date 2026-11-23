@@ -29,6 +29,8 @@ Foundry Nuke 기즈모 환경에서 완벽하게 구동되며, 향후 웹 UI(Fas
 
 ```mermaid
 flowchart TD
+    classDef default width:820px,min-height:45px;
+
     A["🎬 입력 : 첫 프레임 영상 + 사용자 자연어 프롬프트"] --> B["🔍 VLM 객체 그라운딩 (Gemini Flash) : 2D BBox 좌표 및 대상 텍스트 레이블 추출"]
     B --> C["🎯 로컬 SAM 2.1 분할 (Hiera-Large) : 참조 프레임 1.2배 자동 확장 픽셀 단위 초기 타겟 마스크"]
     C --> D["👁️ Nuke 뷰어 사전 검증 : 'Target Selection (VLM)' 뷰 모드에서 1~2초 내 즉시 확인"]
@@ -273,6 +275,8 @@ Designed for production environments, AlphaGen runs natively as a Foundry Nuke G
 
 ```mermaid
 flowchart TD
+    classDef default width:820px,min-height:45px;
+
     A["🎬 Input : Initial Frame + Natural Language Target Prompt"] --> B["🔍 VLM Object Grounding (Gemini Flash) : 2D BBox coordinates and target semantic label extraction"]
     B --> C["🎯 Local SAM 2.1 (Hiera-Large) : 1.2x auto-expanded pixel-level initial target mask generation"]
     C --> D["👁️ Nuke Viewer Pre-verification : Instant verification in 'Target Selection (VLM)' view within 1–2 sec"]
